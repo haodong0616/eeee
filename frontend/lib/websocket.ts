@@ -1,18 +1,19 @@
 // WebSocket 配置 - 自动检测环境（WebSocket无法代理，需直连）
 const getWsUrl = () => {
+  // 服务器端直接返回默认值
+  if (typeof window === 'undefined') {
+    return 'ws://localhost:8383';
+  }
+  
   if (process.env.NEXT_PUBLIC_WS_URL) {
     return process.env.NEXT_PUBLIC_WS_URL;
   }
   
-  if (typeof window !== 'undefined') {
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const hostname = window.location.hostname;
-    const port = window.location.port || (window.location.protocol === 'https:' ? '443' : '80');
-    // WebSocket 通过 Next.js 服务器代理
-    return `${protocol}//${hostname}:${window.location.port || '3000'}`;
-  }
-  
-  return 'ws://localhost:8383';
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const hostname = window.location.hostname;
+  const port = window.location.port || (window.location.protocol === 'https:' ? '443' : '80');
+  // WebSocket 通过 Next.js 服务器代理
+  return `${protocol}//${hostname}:${window.location.port || '3000'}`;
 };
 
 export class WebSocketClient {
@@ -108,23 +109,20 @@ export class WebSocketClient {
 // 延迟创建 WebSocket 客户端实例，避免服务器端渲染时出错
 let _wsClient: WebSocketClient | null = null;
 
-function getWsClient(): WebSocketClient {
-  if (typeof window === 'undefined') {
-    // 服务器端返回空实现
-    return {
-      connect: () => {},
-      disconnect: () => {},
-      on: () => {},
-      off: () => {},
-      send: () => {},
-    } as unknown as WebSocketClient;
+// 导出一个getter，完全避免在模块加载时创建实例
+export const wsClient = new Proxy({} as WebSocketClient, {
+  get(target, prop) {
+    if (typeof window === 'undefined') {
+      // 服务器端返回空函数
+      return () => {};
+    }
+    
+    if (!_wsClient) {
+      _wsClient = new WebSocketClient();
+    }
+    
+    const value = (_wsClient as any)[prop];
+    return typeof value === 'function' ? value.bind(_wsClient) : value;
   }
-  
-  if (!_wsClient) {
-    _wsClient = new WebSocketClient();
-  }
-  return _wsClient;
-}
-
-export const wsClient = getWsClient();
+});
 

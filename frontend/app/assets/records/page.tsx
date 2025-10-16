@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAppSelector } from '@/lib/store/hooks';
 import { useGetDepositRecordsQuery, useGetWithdrawRecordsQuery } from '@/lib/services/api';
 import { useRouter } from 'next/navigation';
@@ -9,6 +9,8 @@ import { useChains } from '@/hooks/useChains';
 
 // 禁用静态生成，因为此页面需要认证
 export const dynamic = 'force-dynamic';
+export const runtime = 'nodejs';
+export const revalidate = 0;
 
 export default function RecordsPage() {
   const router = useRouter();
@@ -32,8 +34,15 @@ export default function RecordsPage() {
     return asset === 'USDT' ? num.toFixed(2) : num.toFixed(4);
   };
 
+  // 使用 useEffect 来处理重定向，避免服务器端渲染时出错
+  useEffect(() => {
+    if (!isAuthenticated) {
+      router.push('/');
+    }
+  }, [isAuthenticated, router]);
+
+  // 如果未认证，不渲染内容
   if (!isAuthenticated) {
-    router.push('/');
     return null;
   }
 
