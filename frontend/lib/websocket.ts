@@ -7,12 +7,12 @@ const getWsUrl = () => {
   if (typeof window !== 'undefined') {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const hostname = window.location.hostname;
-    const port = window.location.port || (protocol === 'https:' ? '443' : '80');
+    const port = window.location.port || (window.location.protocol === 'https:' ? '443' : '80');
     // WebSocket 通过 Next.js 服务器代理
     return `${protocol}//${hostname}:${window.location.port || '3000'}`;
   }
   
-  return 'ws://localhost:8080';
+  return 'ws://localhost:8383';
 };
 
 export class WebSocketClient {
@@ -105,5 +105,26 @@ export class WebSocketClient {
   }
 }
 
-export const wsClient = new WebSocketClient();
+// 延迟创建 WebSocket 客户端实例，避免服务器端渲染时出错
+let _wsClient: WebSocketClient | null = null;
+
+function getWsClient(): WebSocketClient {
+  if (typeof window === 'undefined') {
+    // 服务器端返回空实现
+    return {
+      connect: () => {},
+      disconnect: () => {},
+      on: () => {},
+      off: () => {},
+      send: () => {},
+    } as unknown as WebSocketClient;
+  }
+  
+  if (!_wsClient) {
+    _wsClient = new WebSocketClient();
+  }
+  return _wsClient;
+}
+
+export const wsClient = getWsClient();
 

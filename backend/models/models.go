@@ -11,7 +11,7 @@ import (
 type User struct {
 	ID            string    `gorm:"primaryKey;size:24" json:"id"`
 	WalletAddress string    `gorm:"uniqueIndex;size:42;not null" json:"wallet_address"`
-	Nonce         string    `json:"-"`
+	Nonce         string    `gorm:"size:100" json:"-"`
 	UserLevel     string    `gorm:"size:20;default:'normal'" json:"user_level"` // normal, vip1, vip2, vip3
 	CreatedAt     time.Time `json:"created_at"`
 	UpdatedAt     time.Time `json:"updated_at"`
@@ -154,6 +154,7 @@ type DepositRecord struct {
 	Chain     string          `gorm:"size:20;not null;default:'bsc'" json:"chain"` // bsc, sepolia
 	ChainID   int             `gorm:"not null;default:56" json:"chain_id"`         // 链ID
 	Status    string          `gorm:"size:20;not null;index" json:"status"`        // pending, confirmed, failed
+	TaskID    string          `gorm:"size:24;index" json:"task_id,omitempty"`      // 关联的验证任务ID
 	CreatedAt time.Time       `json:"created_at"`
 	UpdatedAt time.Time       `json:"updated_at"`
 	User      User            `gorm:"foreignKey:UserID" json:"user,omitempty"`

@@ -11,7 +11,7 @@ const port = 3000;
 const app = next({ dev, hostname, port });
 const handle = app.getRequestHandler();
 
-const BACKEND_URL = process.env.BACKEND_URL || 'localhost:8080';
+const BACKEND_URL = process.env.BACKEND_URL || 'localhost:8383';
 
 app.prepare().then(() => {
   const server = createServer(async (req, res) => {

@@ -7,6 +7,9 @@ import { useRouter } from 'next/navigation';
 import { ArrowLeftIcon } from '@heroicons/react/24/outline';
 import { useChains } from '@/hooks/useChains';
 
+// 禁用静态生成，因为此页面需要认证
+export const dynamic = 'force-dynamic';
+
 export default function RecordsPage() {
   const router = useRouter();
   const { isAuthenticated } = useAppSelector((state) => state.auth);

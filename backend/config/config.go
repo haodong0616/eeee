@@ -7,26 +7,32 @@ import (
 )
 
 type Config struct {
-	ServerPort    string
-	DBName        string
-	RedisHost     string
-	RedisPort     string
-	RedisPassword string
-	JWTSecret     string
-	CORSOrigins   string
+	ServerPort  string
+	DBType      string // mysql or sqlite
+	DBHost      string
+	DBPort      string
+	DBUser      string
+	DBPassword  string
+	DBName      string
+	JWTSecret   string
+	CORSOrigins string
 }
 
 func Load() (*Config, error) {
 	godotenv.Load()
 
 	return &Config{
-		ServerPort:    getEnv("SERVER_PORT", "8080"),
-		DBName:        getEnv("DB_NAME", "expchange.db"),
-		RedisHost:     getEnv("REDIS_HOST", "localhost"),
-		RedisPort:     getEnv("REDIS_PORT", "6379"),
-		RedisPassword: getEnv("REDIS_PASSWORD", ""),
-		JWTSecret:     getEnv("JWT_SECRET", "your-secret-key"),
-		CORSOrigins:   getEnv("CORS_ORIGINS", "http://localhost:3000"),
+		ServerPort: getEnv("SERVER_PORT", "8383"),
+		// MySQL 配置（使用共享 Docker MySQL）
+		DBType:     "mysql",
+		DBHost:     "localhost",
+		DBPort:     "3308",
+		DBUser:     "referral_user",
+		DBPassword: "referral123456",
+		DBName:     "expchange",
+		// JWT 配置
+		JWTSecret:   getEnv("JWT_SECRET", "your-secret-key"),
+		CORSOrigins: getEnv("CORS_ORIGINS", "http://localhost:3000"),
 	}, nil
 }
 

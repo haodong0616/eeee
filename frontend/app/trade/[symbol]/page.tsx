@@ -13,6 +13,9 @@ import {
 } from '@/lib/services/api';
 import { wsClient } from '@/lib/websocket';
 import { formatPrice, formatPercent, formatQuantity, formatVolume } from '@/lib/utils/format';
+
+// 禁用静态生成，因为此页面有动态路由参数
+export const dynamic = 'force-dynamic';
 import OrderBook from '@/components/OrderBook';
 import TradeHistory from '@/components/TradeHistory';
 import OrderForm from '@/components/OrderForm';

@@ -30,12 +30,6 @@ func main() {
 	// 自动初始化数据（首次启动时）
 	database.AutoSeed()
 
-	// 初始化Redis（可选，目前未使用）
-	if err := database.InitRedis(cfg); err != nil {
-		log.Printf("Warning: Redis not available: %v", err)
-		log.Println("Continuing without Redis (caching features will be disabled)")
-	}
-
 	// 初始化撮合引擎
 	matchingManager := matching.NewManager()
 

@@ -12,6 +12,9 @@ import Link from 'next/link';
 import { useToast } from '@/hooks/useToast';
 import { useChains } from '@/hooks/useChains';
 
+// 禁用静态生成，因为此页面需要认证
+export const dynamic = 'force-dynamic';
+
 export default function AssetsPage() {
   const router = useRouter();
   const { isAuthenticated } = useAppSelector((state) => state.auth);

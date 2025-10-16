@@ -158,7 +158,7 @@ func SeedKlinesForSymbol(symbol string) {
 
 		// 使用事务批量插入
 		err := DB.Transaction(func(tx *gorm.DB) error {
-			// SQLite参数限制：每批500条
+			// 批量插入：每批500条（SQLite参数限制，MySQL可以更大但500已经足够）
 			batchSize := 500
 
 			for i := 0; i < len(allKlines); i += batchSize {

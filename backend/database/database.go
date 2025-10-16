@@ -1,32 +1,54 @@
 package database
 
 import (
-	"context"
 	"fmt"
 
 	"expchange-backend/config"
 	"expchange-backend/models"
 
-	"github.com/redis/go-redis/v9"
+	"gorm.io/driver/mysql"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 )
 
 var (
-	DB  *gorm.DB
-	RDB *redis.Client
+	DB *gorm.DB
 )
 
 func InitDB(cfg *config.Config) error {
-	// 使用SQLite数据库
-	dbPath := cfg.DBName
-	if dbPath == "" {
-		dbPath = "expchange.db"
+	var err error
+	var dialector gorm.Dialector
+
+	// 根据配置选择数据库类型
+	dbType := cfg.DBType
+	if dbType == "" {
+		dbType = "mysql"
 	}
 
-	var err error
-	DB, err = gorm.Open(sqlite.Open(dbPath), &gorm.Config{
+	switch dbType {
+	case "mysql":
+		// MySQL 连接字符串格式: user:password@tcp(host:port)/dbname?charset=utf8mb4&parseTime=True&loc=Local
+		dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?charset=utf8mb4&parseTime=True&loc=Local",
+			cfg.DBUser,
+			cfg.DBPassword,
+			cfg.DBHost,
+			cfg.DBPort,
+			cfg.DBName,
+		)
+		dialector = mysql.Open(dsn)
+	case "sqlite":
+		// 使用 SQLite 数据库
+		dbPath := cfg.DBName
+		if dbPath == "" {
+			dbPath = "expchange.db"
+		}
+		dialector = sqlite.Open(dbPath)
+	default:
+		return fmt.Errorf("unsupported database type: %s", dbType)
+	}
+
+	DB, err = gorm.Open(dialector, &gorm.Config{
 		Logger: logger.Default.LogMode(logger.Error), // 只记录错误级别的日志
 	})
 	if err != nil {
@@ -52,22 +74,6 @@ func InitDB(cfg *config.Config) error {
 	)
 	if err != nil {
 		return fmt.Errorf("failed to migrate database: %w", err)
-	}
-
-	return nil
-}
-
-func InitRedis(cfg *config.Config) error {
-	RDB = redis.NewClient(&redis.Options{
-		Addr:     fmt.Sprintf("%s:%s", cfg.RedisHost, cfg.RedisPort),
-		Password: cfg.RedisPassword,
-		DB:       0,
-	})
-
-	ctx := context.Background()
-	_, err := RDB.Ping(ctx).Result()
-	if err != nil {
-		return fmt.Errorf("failed to connect to redis: %w", err)
 	}
 
 	return nil
