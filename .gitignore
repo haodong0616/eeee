@@ -1,0 +1,164 @@
+# ====================
+# 依赖文件
+# ====================
+node_modules/
+vendor/
+
+# ====================
+# 环境变量和敏感配置
+# ====================
+.env
+.env.local
+.env.*.local
+*.pem
+
+# ⚠️ 重要：私钥和密钥文件
+backend/.env
+frontend/.env.local
+admin/.env.local
+PLATFORM_PRIVATE_KEY*
+*.key
+*.secret
+
+# ====================
+# 前端 (Next.js)
+# ====================
+frontend/.next/
+frontend/out/
+frontend/build/
+frontend/.vercel
+frontend/*.tsbuildinfo
+frontend/next-env.d.ts
+
+admin/.next/
+admin/out/
+admin/build/
+admin/.vercel
+admin/*.tsbuildinfo
+admin/next-env.d.ts
+
+# ====================
+# 后端 (Go)
+# ====================
+# 编译后的可执行文件
+backend/*.exe
+backend/*.exe~
+backend/*.dll
+backend/*.so
+backend/*.dylib
+backend/main
+backend/bot_backend_main
+backend/bot_backend_start
+
+# 测试文件
+backend/*.test
+backend/*.out
+
+# 依赖缓存
+backend/go.sum.backup
+
+# ====================
+# 数据库文件
+# ====================
+*.db
+*.sqlite
+*.db-shm
+*.db-wal
+backend/*.db
+backend/expchange.db
+backend/trading_bot.db
+
+# ====================
+# 日志文件
+# ====================
+*.log
+logs/
+backend/log/
+backend/backend.log
+frontend/*.log
+admin/*.log
+
+# ====================
+# 操作系统文件
+# ====================
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+Desktop.ini
+
+# ====================
+# IDE 和编辑器
+# ====================
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.settings/
+.classpath
+
+# Cursor
+.cursor/
+
+# ====================
+# 临时文件
+# ====================
+tmp/
+temp/
+*.tmp
+*.bak
+*.cache
+
+# ====================
+# 构建产物
+# ====================
+dist/
+build/
+coverage/
+
+# ====================
+# 包管理器
+# ====================
+.pnp
+.pnp.js
+.yarn/install-state.gz
+yarn-error.log*
+npm-debug.log*
+package-lock.json.backup
+
+# ====================
+# 其他
+# ====================
+# 脚本生成的文件
+backend/scripts/*.log
+backend/scripts/output/
+
+# 备份文件
+*.backup
+*.old
+
+# 压缩文件
+*.zip
+*.tar.gz
+*.rar
+
+# 文档草稿
+DRAFT_*
+TODO_LOCAL.md
+
+# ====================
+# 项目特定
+# ====================
+# 不要提交这些文档（如果包含敏感信息）
+# API_FIX.md
+# MOBILE_ACCESS.md
+# PROXY_SETUP.md
+
+# 测试数据
+test-data/
+mock-data/
