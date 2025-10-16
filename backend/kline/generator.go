@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/shopspring/decimal"
+	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
 )
 
 type Generator struct {
@@ -72,7 +74,9 @@ func (g *Generator) generateKlineForPair(symbol string, interval string, openTim
 	if len(trades) == 0 {
 		// 如果没有成交记录，使用上一根K线的收盘价
 		var lastKline models.Kline
-		result := database.DB.Where("symbol = ? AND interval = ?", symbol, interval).
+		// 静默查询，不记录"record not found"错误
+		result := database.DB.Session(&gorm.Session{Logger: database.DB.Logger.LogMode(logger.Silent)}).
+			Where("symbol = ? AND interval = ?", symbol, interval).
 			Order("open_time DESC").
 			First(&lastKline)
 
@@ -128,8 +132,7 @@ func (g *Generator) generateKlineForPair(symbol string, interval string, openTim
 			Volume:   volume,
 		}
 		database.DB.Create(&kline)
-		log.Printf("Created kline for %s %s: O:%s H:%s L:%s C:%s V:%s",
-			symbol, interval, open, high, low, close, volume)
+		// 静默创建，不输出日志
 	} else {
 		// 更新现有K线
 		existingKline.High = high

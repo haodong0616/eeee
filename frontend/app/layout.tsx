@@ -5,6 +5,7 @@ import Providers from "./providers";
 import { RainbowProvider } from "@/providers/RainbowProvider";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
+import { Toaster } from 'react-hot-toast';
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -28,6 +29,31 @@ export default function RootLayout({
               <main className="flex-1">{children}</main>
               <Footer />
             </div>
+            <Toaster
+              position="top-center"
+              toastOptions={{
+                duration: 3000,
+                style: {
+                  background: '#1a1f35',
+                  color: '#fff',
+                  border: '1px solid #374151',
+                  borderRadius: '8px',
+                  padding: '12px 20px',
+                },
+                success: {
+                  iconTheme: {
+                    primary: '#10b981',
+                    secondary: '#fff',
+                  },
+                },
+                error: {
+                  iconTheme: {
+                    primary: '#ef4444',
+                    secondary: '#fff',
+                  },
+                },
+              }}
+            />
           </Providers>
         </RainbowProvider>
       </body>

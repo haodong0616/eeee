@@ -5,6 +5,7 @@ import (
 	"expchange-backend/models"
 
 	"github.com/shopspring/decimal"
+	"gorm.io/gorm"
 )
 
 type FeeService struct{}
@@ -17,7 +18,7 @@ func NewFeeService() *FeeService {
 func (s *FeeService) InitDefaultFeeConfig() error {
 	var count int64
 	database.DB.Model(&models.FeeConfig{}).Count(&count)
-	
+
 	if count > 0 {
 		return nil // 已经初始化过
 	}
@@ -55,15 +56,27 @@ func (s *FeeService) InitDefaultFeeConfig() error {
 	return nil
 }
 
-// 获取用户手续费率
+// 获取用户手续费率（从系统配置读取）
 func (s *FeeService) GetUserFeeRate(userLevel string) (*models.FeeConfig, error) {
-	var config models.FeeConfig
-	err := database.DB.Where("user_level = ?", userLevel).First(&config).Error
-	if err != nil {
-		// 如果找不到，返回默认配置
-		database.DB.Where("user_level = ?", "normal").First(&config)
+	sysConfig := database.GetSystemConfigManager()
+
+	// 从系统配置读取手续费率
+	makerKey := "fee." + userLevel + ".maker"
+	takerKey := "fee." + userLevel + ".taker"
+
+	makerFeeStr := sysConfig.Get(makerKey, "0.001")
+	takerFeeStr := sysConfig.Get(takerKey, "0.002")
+
+	makerFee, _ := decimal.NewFromString(makerFeeStr)
+	takerFee, _ := decimal.NewFromString(takerFeeStr)
+
+	config := &models.FeeConfig{
+		UserLevel:    userLevel,
+		MakerFeeRate: makerFee,
+		TakerFeeRate: takerFee,
 	}
-	return &config, nil
+
+	return config, nil
 }
 
 // 计算交易手续费
@@ -85,7 +98,7 @@ func (s *FeeService) CalculateFee(userLevel string, isMaker bool, tradeAmount de
 }
 
 // 记录手续费
-func (s *FeeService) RecordFee(userID, orderID, tradeID uint, asset string, amount, feeRate decimal.Decimal, orderSide string) error {
+func (s *FeeService) RecordFee(userID, orderID, tradeID string, asset string, amount, feeRate decimal.Decimal, orderSide string) error {
 	record := models.FeeRecord{
 		UserID:    userID,
 		OrderID:   orderID,
@@ -98,8 +111,22 @@ func (s *FeeService) RecordFee(userID, orderID, tradeID uint, asset string, amou
 	return database.DB.Create(&record).Error
 }
 
+// RecordFeeInTx 在事务中记录手续费（性能优化版）
+func (s *FeeService) RecordFeeInTx(tx *gorm.DB, userID, orderID, tradeID string, asset string, amount, feeRate decimal.Decimal, orderSide string) error {
+	record := models.FeeRecord{
+		UserID:    userID,
+		OrderID:   orderID,
+		TradeID:   tradeID,
+		Asset:     asset,
+		Amount:    amount,
+		FeeRate:   feeRate,
+		OrderSide: orderSide,
+	}
+	return tx.Create(&record).Error
+}
+
 // 获取用户手续费统计
-func (s *FeeService) GetUserFeeStats(userID uint) (map[string]decimal.Decimal, error) {
+func (s *FeeService) GetUserFeeStats(userID string) (map[string]decimal.Decimal, error) {
 	var records []models.FeeRecord
 	database.DB.Where("user_id = ?", userID).Find(&records)
 
@@ -113,4 +140,3 @@ func (s *FeeService) GetUserFeeStats(userID uint) (map[string]decimal.Decimal, e
 
 	return stats, nil
 }
-

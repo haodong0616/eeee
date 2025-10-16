@@ -102,7 +102,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 }
 
 func (h *AuthHandler) GetProfile(c *gin.Context) {
-	userID := c.GetUint("user_id")
+	userID := c.GetString("user_id")
 
 	var user models.User
 	if err := database.DB.First(&user, userID).Error; err != nil {
@@ -113,7 +113,7 @@ func (h *AuthHandler) GetProfile(c *gin.Context) {
 	c.JSON(http.StatusOK, user)
 }
 
-func (h *AuthHandler) generateToken(userID uint, walletAddress string) (string, error) {
+func (h *AuthHandler) generateToken(userID string, walletAddress string) (string, error) {
 	claims := middleware.Claims{
 		UserID:        userID,
 		WalletAddress: walletAddress,

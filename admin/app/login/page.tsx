@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import toast from 'react-hot-toast';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -13,16 +14,24 @@ export default function LoginPage() {
     e.preventDefault();
     setLoading(true);
 
-    // 简化的登录逻辑，实际应该调用API
-    // 这里假设admin/admin是正确的凭据
-    if (username === 'admin' && password === 'admin') {
-      localStorage.setItem('admin_token', 'admin-token-placeholder');
-      router.push('/dashboard');
-    } else {
-      alert('用户名或密码错误');
+    try {
+      // 简化的登录逻辑
+      if (username === 'admin' && password === 'admin') {
+        // 设置token
+        localStorage.setItem('admin_token', 'admin-token-placeholder');
+        console.log('✅ 登录成功，token已设置:', localStorage.getItem('admin_token'));
+        
+        // 使用window.location.href强制跳转
+        window.location.href = '/dashboard/pairs';
+      } else {
+        toast.error('用户名或密码错误\n默认账号: admin / admin');
+        setLoading(false);
+      }
+    } catch (error) {
+      console.error('登录错误:', error);
+      toast.error('登录失败，请重试');
+      setLoading(false);
     }
-
-    setLoading(false);
   };
 
   return (

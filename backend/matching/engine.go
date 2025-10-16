@@ -43,7 +43,7 @@ func (e *Engine) AddOrder(order *models.Order) {
 	e.match()
 }
 
-func (e *Engine) CancelOrder(orderID uint, side string) bool {
+func (e *Engine) CancelOrder(orderID string, side string) bool {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 

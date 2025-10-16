@@ -6,9 +6,11 @@ declare global {
   }
 }
 
+import { showToast } from '@/hooks/useToast';
+
 export async function connectWallet(): Promise<string | null> {
   if (typeof window.ethereum === 'undefined') {
-    alert('请安装 MetaMask 钱包!');
+    showToast.error('请安装 MetaMask 钱包!');
     return null;
   }
 

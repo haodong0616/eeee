@@ -1,6 +1,7 @@
 import axios from 'axios';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
+// 使用相对路径，通过Next.js API Routes代理
+const API_URL = '';
 
 const apiClient = axios.create({
   baseURL: `${API_URL}/api`,

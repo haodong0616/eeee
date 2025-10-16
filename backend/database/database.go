@@ -10,6 +10,7 @@ import (
 	"github.com/redis/go-redis/v9"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
 )
 
 var (
@@ -25,7 +26,9 @@ func InitDB(cfg *config.Config) error {
 	}
 
 	var err error
-	DB, err = gorm.Open(sqlite.Open(dbPath), &gorm.Config{})
+	DB, err = gorm.Open(sqlite.Open(dbPath), &gorm.Config{
+		Logger: logger.Default.LogMode(logger.Error), // 只记录错误级别的日志
+	})
 	if err != nil {
 		return fmt.Errorf("failed to connect to database: %w", err)
 	}
@@ -42,6 +45,10 @@ func InitDB(cfg *config.Config) error {
 		&models.FeeRecord{},
 		&models.DepositRecord{},
 		&models.WithdrawRecord{},
+		&models.SystemConfig{},
+		&models.ChainConfig{},
+		&models.Task{},
+		&models.TaskLog{},
 	)
 	if err != nil {
 		return fmt.Errorf("failed to migrate database: %w", err)

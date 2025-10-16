@@ -140,6 +140,18 @@ export function getQuantityStep(symbol: string): string {
   return '0.0001';
 }
 
+// 将step值转换为小数位数
+export function getDecimalsFromStep(step: string): number {
+  const decimals = step.split('.')[1]?.length || 0;
+  return decimals;
+}
+
+// 根据step格式化数值（去除尾部0）
+export function formatByStep(value: number, step: string): string {
+  const decimals = getDecimalsFromStep(step);
+  return parseFloat(value.toFixed(decimals)).toString();
+}
+
 // 格式化成交量（千位转换）
 export function formatVolume(volume: string | number): string {
   const numVolume = typeof volume === 'string' ? parseFloat(volume) : volume;

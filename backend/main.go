@@ -7,11 +7,10 @@ import (
 	"expchange-backend/kline"
 	"expchange-backend/matching"
 	"expchange-backend/middleware"
-	"expchange-backend/services"
+	"expchange-backend/queue"
 	"expchange-backend/simulator"
 	"expchange-backend/websocket"
 	"log"
-	"os"
 
 	"github.com/gin-gonic/gin"
 )
@@ -48,48 +47,32 @@ func main() {
 	klineGenerator := kline.NewGenerator()
 	klineGenerator.Start()
 
-	// 初始化充值验证服务
-	depositVerifier, err := services.NewDepositVerifier()
-	if err != nil {
-		log.Printf("⚠️  充值验证服务初始化失败: %v", err)
-		log.Println("充值功能将不可用")
-	} else {
-		go depositVerifier.Start()
-		log.Println("✅ 充值验证队列已启动")
-	}
+	// 初始化系统配置管理器
+	sysConfig := database.GetSystemConfigManager()
 
-	// 初始化提现处理服务
-	// 注意：需要配置私钥环境变量 PLATFORM_PRIVATE_KEY
-	privateKey := os.Getenv("PLATFORM_PRIVATE_KEY")
-	if privateKey != "" {
-		withdrawProcessor, err := services.NewWithdrawProcessor(privateKey)
-		if err != nil {
-			log.Printf("⚠️  提现处理服务初始化失败: %v", err)
-			log.Println("提现功能将不可用")
-		} else {
-			go withdrawProcessor.Start()
-			log.Println("✅ 提现处理队列已启动")
-		}
-	} else {
-		log.Println("⚠️  未配置 PLATFORM_PRIVATE_KEY，提现功能将不可用")
-	}
+	// 初始化任务队列（统一管理所有后台任务）
+	// 任务队列内部会初始化：
+	// - 数据生成workers（多个并发worker）
+	// - 充值验证worker（独立进程）
+	// - 提现处理worker（独立进程 + Nonce管理器）
+	queue.GetQueue()
+	workers := sysConfig.GetInt("task.queue.workers", 10)
+	log.Printf("✅ 任务队列已初始化")
+	log.Printf("   - 数据生成: %d个并发worker", workers)
+	log.Printf("   - 充值验证: 1个独立worker")
+	log.Printf("   - 提现处理: 1个独立worker（线程安全）")
 
-	// 初始化市场模拟器（可选，用于演示）
-	// 如果设置了环境变量 ENABLE_SIMULATOR=true，则启动模拟器
-	if os.Getenv("ENABLE_SIMULATOR") == "true" {
-		log.Println("🎮 启用市场模拟器")
+	// 启动动态订单簿模拟器（根据数据库配置自动为启用的交易对生成订单）
+	dynamicSim := simulator.NewDynamicOrderBookSimulator(matchingManager)
+	dynamicSim.Start()
+	log.Println("✅ 动态订单簿模拟器已启动")
 
-		// 启动价格模拟器
-		marketSim := simulator.NewTrendSimulator(wsHub)
-		marketSim.Start()
+	// 初始化Gin (设置为Release模式降低日志输出)
+	gin.SetMode(gin.ReleaseMode)
+	r := gin.New()
 
-		// 启动订单簿模拟器
-		orderbookSim := simulator.NewOrderBookSimulator(matchingManager)
-		orderbookSim.Start()
-	}
-
-	// 初始化Gin
-	r := gin.Default()
+	// 只添加Recovery中间件，不添加Logger中间件以减少日志输出
+	r.Use(gin.Recovery())
 
 	// 中间件
 	r.Use(middleware.CORSMiddleware(cfg))
@@ -103,6 +86,7 @@ func main() {
 	adminHandler := handlers.NewAdminHandler()
 	klineHandler := handlers.NewKlineHandler(klineGenerator)
 	feeHandler := handlers.NewFeeHandler()
+	chainHandler := handlers.NewChainHandler()
 
 	// API路由
 	api := r.Group("/api")
@@ -125,6 +109,9 @@ func main() {
 			market.GET("/klines/:symbol", klineHandler.GetKlines)
 			market.GET("/klines/:symbol/tv", klineHandler.GetKlinesForTradingView)
 		}
+
+		// 链配置（公开，只返回启用的链）
+		api.GET("/chains", chainHandler.GetEnabledChains)
 
 		// 需要认证的路由
 		authenticated := api.Group("")
@@ -168,13 +155,49 @@ func main() {
 			admin.GET("/users", adminHandler.GetUsers)
 			admin.GET("/orders", adminHandler.GetAllOrders)
 			admin.GET("/trades", adminHandler.GetAllTrades)
+			admin.GET("/deposits", adminHandler.GetAllDeposits)
+			admin.GET("/withdrawals", adminHandler.GetAllWithdrawals)
 			admin.GET("/stats", adminHandler.GetStats)
-			admin.POST("/pairs", adminHandler.CreateTradingPair)
-			admin.PUT("/pairs/:id/status", adminHandler.UpdateTradingPairStatus)
+
+		// 交易对管理
+		admin.GET("/pairs", adminHandler.GetTradingPairs)
+		admin.POST("/pairs", adminHandler.CreateTradingPair)
+		admin.PUT("/pairs/:id", adminHandler.UpdateTradingPair)
+		admin.PUT("/pairs/:id/status", adminHandler.UpdateTradingPairStatus)
+		admin.PUT("/pairs/:id/simulator", adminHandler.UpdateTradingPairSimulator)
+
+		// 数据生成任务
+		admin.POST("/pairs/generate-trades", adminHandler.GenerateTradeDataForPair)
+		admin.POST("/pairs/generate-klines", adminHandler.GenerateKlineDataForPair)
+
+			// 任务管理
+			admin.GET("/tasks", adminHandler.GetAllTasks)
+			admin.GET("/tasks/:id", adminHandler.GetTaskStatus)
+			admin.GET("/tasks/:id/logs", adminHandler.GetTaskLogs)
+			admin.POST("/tasks/:id/retry", adminHandler.RetryTask)
+			admin.GET("/tasks/running", adminHandler.GetRunningTask)
+
+			// K线管理
 			admin.POST("/klines/generate", klineHandler.GenerateHistoricalKlines)
+
+			// 手续费管理
 			admin.GET("/fees", feeHandler.GetAllFeeRecords)
 			admin.GET("/fees/configs", feeHandler.GetFeeConfigs)
 			admin.PUT("/users/:id/level", feeHandler.UpdateUserLevel)
+
+			// 系统配置管理
+			admin.GET("/configs", adminHandler.GetSystemConfigs)
+			admin.GET("/configs/:id", adminHandler.GetSystemConfig)
+			admin.PUT("/configs/:id", adminHandler.UpdateSystemConfig)
+			admin.POST("/configs/reload", adminHandler.ReloadSystemConfigs)
+
+			// 链配置管理
+			admin.GET("/chains", chainHandler.GetChains)
+			admin.GET("/chains/:id", chainHandler.GetChain)
+			admin.POST("/chains", chainHandler.CreateChain)
+			admin.PUT("/chains/:id", chainHandler.UpdateChain)
+			admin.PUT("/chains/:id/status", chainHandler.UpdateChainStatus)
+			admin.DELETE("/chains/:id", chainHandler.DeleteChain)
 		}
 	}
 

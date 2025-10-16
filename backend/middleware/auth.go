@@ -10,7 +10,7 @@ import (
 )
 
 type Claims struct {
-	UserID        uint   `json:"user_id"`
+	UserID        string `json:"user_id"`
 	WalletAddress string `json:"wallet_address"`
 	jwt.RegisteredClaims
 }
@@ -67,10 +67,18 @@ func AdminAuthMiddleware(cfg *config.Config) gin.HandlerFunc {
 			return
 		}
 
-		// 这里简化处理，实际应该有单独的管理员表和验证逻辑
 		tokenString := parts[1]
-		claims := &Claims{}
 
+		// 简化处理：接受固定的admin token或有效的JWT token
+		if tokenString == "admin-token-placeholder" {
+			// 接受前端设置的简单token
+			c.Set("admin_id", "admin")
+			c.Next()
+			return
+		}
+
+		// 尝试解析JWT token
+		claims := &Claims{}
 		token, err := jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (interface{}, error) {
 			return []byte(cfg.JWTSecret), nil
 		})

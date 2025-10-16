@@ -7,6 +7,9 @@ import { useGetNonceMutation, useLoginMutation } from '@/lib/services/api';
 import { useState, useEffect } from 'react';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
 import { useAccount, useSignMessage, useDisconnect } from 'wagmi';
+import ChainSwitcher from './ChainSwitcher';
+import ChainFilter from './ChainFilter';
+import { showToast } from '@/hooks/useToast';
 
 export default function Header() {
   const dispatch = useAppDispatch();
@@ -63,7 +66,7 @@ export default function Header() {
       dispatch(setAuth({ user: result.user, token: result.token }));
       
       console.log('✅ 登录成功！');
-      alert('✅ 登录成功！');
+      showToast.success('登录成功！');
     } catch (error: any) {
       console.error('❌ 登录失败详情:', error);
       
@@ -76,7 +79,7 @@ export default function Header() {
         errorMsg = error.message;
       }
       
-      alert(errorMsg);
+      showToast.error(errorMsg);
     } finally {
       setLoggingIn(false);
     }
@@ -90,6 +93,9 @@ export default function Header() {
 
   return (
     <header className="bg-[#0f1429] border-b border-gray-800">
+      {/* 链过滤器（后台检查链是否启用） */}
+      <ChainFilter />
+      
       <nav className="container mx-auto px-4">
         <div className="flex items-center justify-between h-16">
           <div className="flex items-center space-x-8">
@@ -128,40 +134,46 @@ export default function Header() {
             </div>
           </div>
 
-          <div className="rainbow-wallet-btn">
-            {isAuthenticated ? (
-              <button
-                onClick={handleLogout}
-                className="px-3 md:px-4 py-1.5 md:py-2 text-sm md:text-base bg-red-600 hover:bg-red-700 rounded-lg transition"
-              >
-                退出
-              </button>
-            ) : (
-              <ConnectButton.Custom>
-                {({ account, chain, openConnectModal, mounted }) => {
-                  return (
-                    <div
-                      {...(!mounted && {
-                        'aria-hidden': true,
-                        style: {
-                          opacity: 0,
-                          pointerEvents: 'none',
-                          userSelect: 'none',
-                        },
-                      })}
-                    >
-                      <button
-                        onClick={openConnectModal}
-                        disabled={!mounted || loggingIn}
-                        className="px-4 md:px-6 py-1.5 md:py-2 text-sm md:text-base bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white rounded-lg font-semibold transition shadow-lg hover:shadow-purple-500/50 disabled:opacity-50"
+          <div className="flex items-center gap-3">
+            {/* 链选择器 */}
+            <ChainSwitcher />
+            
+            {/* 钱包按钮 */}
+            <div className="rainbow-wallet-btn">
+              {isAuthenticated ? (
+                <button
+                  onClick={handleLogout}
+                  className="px-3 md:px-4 py-1.5 md:py-2 text-sm md:text-base bg-red-600 hover:bg-red-700 rounded-lg transition"
+                >
+                  退出
+                </button>
+              ) : (
+                <ConnectButton.Custom>
+                  {({ account, chain, openConnectModal, mounted }) => {
+                    return (
+                      <div
+                        {...(!mounted && {
+                          'aria-hidden': true,
+                          style: {
+                            opacity: 0,
+                            pointerEvents: 'none',
+                            userSelect: 'none',
+                          },
+                        })}
                       >
-                        {loggingIn ? '登录中...' : '连接钱包'}
-                      </button>
-                    </div>
-                  );
-                }}
-              </ConnectButton.Custom>
-            )}
+                        <button
+                          onClick={openConnectModal}
+                          disabled={!mounted || loggingIn}
+                          className="px-4 md:px-6 py-1.5 md:py-2 text-sm md:text-base bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white rounded-lg font-semibold transition shadow-lg hover:shadow-purple-500/50 disabled:opacity-50"
+                        >
+                          {loggingIn ? '登录中...' : '连接钱包'}
+                        </button>
+                      </div>
+                    );
+                  }}
+                </ConnectButton.Custom>
+              )}
+            </div>
           </div>
         </div>
       </nav>

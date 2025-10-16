@@ -18,6 +18,7 @@ import TradeHistory from '@/components/TradeHistory';
 import OrderForm from '@/components/OrderForm';
 import MyOrders from '@/components/MyOrders';
 import TradingChart from '@/components/TradingChart';
+import { useToast } from '@/hooks/useToast';
 
 export default function TradePage() {
   const params = useParams();
@@ -57,26 +58,40 @@ export default function TradePage() {
     };
   }, [symbol]);
 
+  const toast = useToast();
+
   const handleCreateOrder = async (orderData: any) => {
     if (!isAuthenticated) {
-      alert('请先连接钱包');
+      toast.error('请先连接钱包');
       return;
     }
 
     try {
-      await createOrder({ ...orderData, symbol }).unwrap();
-      alert('订单创建成功');
+      await toast.promise(
+        createOrder({ ...orderData, symbol }).unwrap(),
+        {
+          loading: '正在创建订单...',
+          success: '订单创建成功',
+          error: (err) => err?.data?.error || '订单创建失败',
+        }
+      );
     } catch (error: any) {
-      alert(error?.data?.error || '订单创建失败');
+      // toast.promise已处理错误
     }
   };
 
-  const handleCancelOrder = async (orderId: number) => {
+  const handleCancelOrder = async (orderId: string) => {
     try {
-      await cancelOrder(orderId).unwrap();
-      alert('订单已取消');
+      await toast.promise(
+        cancelOrder(orderId).unwrap(),
+        {
+          loading: '正在取消订单...',
+          success: '订单已取消',
+          error: (err) => err?.data?.error || '取消订单失败',
+        }
+      );
     } catch (error: any) {
-      alert(error?.data?.error || '取消订单失败');
+      // toast.promise已处理错误
     }
   };
 

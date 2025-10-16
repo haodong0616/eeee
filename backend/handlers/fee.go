@@ -28,7 +28,7 @@ func (h *FeeHandler) GetFeeConfigs(c *gin.Context) {
 
 // 获取用户手续费统计
 func (h *FeeHandler) GetUserFeeStats(c *gin.Context) {
-	userID := c.GetUint("user_id")
+	userID := c.GetString("user_id")
 
 	stats, err := h.feeService.GetUserFeeStats(userID)
 	if err != nil {
@@ -41,7 +41,7 @@ func (h *FeeHandler) GetUserFeeStats(c *gin.Context) {
 
 // 获取用户手续费记录
 func (h *FeeHandler) GetUserFeeRecords(c *gin.Context) {
-	userID := c.GetUint("user_id")
+	userID := c.GetString("user_id")
 
 	var records []models.FeeRecord
 	database.DB.Where("user_id = ?", userID).Order("created_at DESC").Limit(100).Find(&records)
@@ -78,4 +78,3 @@ func (h *FeeHandler) UpdateUserLevel(c *gin.Context) {
 
 	c.JSON(http.StatusOK, user)
 }
-

@@ -5,7 +5,7 @@ const API_URL = '';
 
 // 定义所有接口的类型
 export interface User {
-  id: number;
+  id: string;
   wallet_address: string;
   user_level: string;
   created_at: string;
@@ -13,7 +13,7 @@ export interface User {
 }
 
 export interface TradingPair {
-  id: number;
+  id: string;
   symbol: string;
   base_asset: string;
   quote_asset: string;
@@ -48,17 +48,17 @@ export interface OrderBook {
 }
 
 export interface Trade {
-  id: number;
+  id: string;
   symbol: string;
-  buy_order_id: number;
-  sell_order_id: number;
+  buy_order_id: string;
+  sell_order_id: string;
   price: string;
   quantity: string;
   created_at: string;
 }
 
 export interface Kline {
-  id: number;
+  id: string;
   symbol: string;
   interval: string;
   open_time: number;
@@ -72,8 +72,8 @@ export interface Kline {
 }
 
 export interface Order {
-  id: number;
-  user_id: number;
+  id: string;
+  user_id: string;
   symbol: string;
   order_type: string;
   side: string;
@@ -86,11 +86,26 @@ export interface Order {
 }
 
 export interface Balance {
-  id: number;
-  user_id: number;
+  id: string;
+  user_id: string;
   asset: string;
   available: string;
   frozen: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ChainConfig {
+  id: string;
+  chain_name: string;
+  chain_id: number;
+  rpc_url: string;
+  block_explorer_url: string;
+  usdt_contract_address: string;
+  usdt_decimals: number;
+  platform_deposit_address: string;
+  platform_withdraw_private_key?: string;
+  enabled: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -130,6 +145,11 @@ export const api = createApi({
     }),
     getProfile: builder.query<User, void>({
       query: () => '/profile',
+    }),
+
+    // ========== 链配置接口 ==========
+    getChains: builder.query<ChainConfig[], void>({
+      query: () => '/chains',
     }),
 
     // ========== 市场数据接口 ==========
@@ -185,11 +205,11 @@ export const api = createApi({
       }),
       providesTags: ['Orders'],
     }),
-    getOrder: builder.query<Order, number>({
+    getOrder: builder.query<Order, string>({
       query: (orderId) => `/orders/${orderId}`,
       providesTags: (result, error, orderId) => [{ type: 'Orders', id: orderId }],
     }),
-    cancelOrder: builder.mutation<Order, number>({
+    cancelOrder: builder.mutation<Order, string>({
       query: (orderId) => ({
         url: `/orders/${orderId}`,
         method: 'DELETE',
@@ -206,7 +226,7 @@ export const api = createApi({
       query: (asset) => `/balances/${asset}`,
       providesTags: (result, error, asset) => [{ type: 'Balances', id: asset }],
     }),
-    deposit: builder.mutation<Balance, { asset: string; amount: string; txHash: string }>({
+    deposit: builder.mutation<Balance, { asset: string; amount: string; txHash: string; chain?: string; chainId?: number }>({
       query: (data) => ({
         url: '/balances/deposit',
         method: 'POST',
@@ -214,7 +234,7 @@ export const api = createApi({
       }),
       invalidatesTags: ['Balances'],
     }),
-    withdraw: builder.mutation<any, { asset: string; amount: string; address: string }>({
+    withdraw: builder.mutation<any, { asset: string; amount: string; address: string; chain?: string; chainId?: number }>({
       query: (data) => ({
         url: '/balances/withdraw',
         method: 'POST',
@@ -241,6 +261,9 @@ export const {
   useGetNonceMutation,
   useLoginMutation,
   useGetProfileQuery,
+  
+  // 链配置
+  useGetChainsQuery,
   
   // 市场数据
   useGetTradingPairsQuery,

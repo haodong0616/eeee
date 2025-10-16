@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import { useGetBalancesQuery } from '@/lib/services/api';
-import { getPriceStep, getQuantityStep, formatPrice } from '@/lib/utils/format';
+import { getPriceStep, getQuantityStep, formatPrice, getDecimalsFromStep } from '@/lib/utils/format';
+import { useToast } from '@/hooks/useToast';
 
 interface OrderFormProps {
   symbol: string;
@@ -17,6 +18,7 @@ export default function OrderForm({ symbol, currentPrice, onSubmit, isAuthentica
   const [orderType, setOrderType] = useState<'limit' | 'market'>('limit');
   const [price, setPrice] = useState('');
   const [quantity, setQuantity] = useState('');
+  const toast = useToast();
 
   // 获取用户余额
   const { data: balances = [] } = useGetBalancesQuery(undefined, {
@@ -28,16 +30,11 @@ export default function OrderForm({ symbol, currentPrice, onSubmit, isAuthentica
   useEffect(() => {
     if (initialPrice && orderType === 'limit') {
       const priceNum = parseFloat(initialPrice);
-      // 根据价格大小决定小数位
-      let decimals = 2;
-      if (priceNum >= 1000) decimals = 2;
-      else if (priceNum >= 100) decimals = 2;
-      else if (priceNum >= 1) decimals = 3;
-      else if (priceNum >= 0.01) decimals = 4;
-      else if (priceNum >= 0.0001) decimals = 6;
-      else decimals = 8;
-      
-      setPrice(priceNum.toFixed(decimals));
+      // 使用与输入框 step 匹配的小数位
+      const step = getPriceStep(priceNum);
+      const decimals = getDecimalsFromStep(step);
+      // 格式化并去除尾部0
+      setPrice(parseFloat(priceNum.toFixed(decimals)).toString());
     }
   }, [initialPrice, orderType]);
 
@@ -57,7 +54,21 @@ export default function OrderForm({ symbol, currentPrice, onSubmit, isAuthentica
       return '0';
     }
 
-    return parseFloat(balance.available).toFixed(8);
+    const value = parseFloat(balance.available);
+    
+    // 智能小数位：USDT固定2位，其他币种根据大小调整，去除尾部0
+    if (asset === 'USDT') {
+      return value.toFixed(2);
+    }
+    
+    // 其他币种：根据数值大小决定小数位
+    let decimals = 4;
+    if (value < 0.0001) decimals = 8;
+    else if (value < 0.01) decimals = 6;
+    else if (value < 1) decimals = 4;
+    
+    // 格式化并去除尾部的0
+    return parseFloat(value.toFixed(decimals)).toString();
   };
 
   const availableAsset = side === 'buy' ? quoteAsset : baseAsset;
@@ -70,35 +81,38 @@ export default function OrderForm({ symbol, currentPrice, onSubmit, isAuthentica
     }
 
     const available = parseFloat(availableBalance);
+    const step = getQuantityStep(symbol); // 获取数量的step值
+    const decimals = getDecimalsFromStep(step); // 获取小数位数
     
     if (side === 'buy') {
       // 买入：根据可用USDT和价格计算最大可买数量
       const currentPriceValue = parseFloat(price || currentPrice || '0');
       if (currentPriceValue > 0) {
         const maxQty = available / currentPriceValue;
-        setQuantity(maxQty.toFixed(8));
+        // 使用与step匹配的小数位格式化，并去除尾部0
+        setQuantity(parseFloat(maxQty.toFixed(decimals)).toString());
       }
     } else {
-      // 卖出：直接使用可用BTC数量
-      setQuantity(available.toFixed(8));
+      // 卖出：直接使用可用数量，使用与step匹配的小数位，并去除尾部0
+      setQuantity(parseFloat(available.toFixed(decimals)).toString());
     }
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-
+    
     if (!isAuthenticated) {
-      alert('请先连接钱包');
+      toast.error('请先连接钱包');
       return;
     }
 
     if (orderType === 'limit' && !price) {
-      alert('请输入价格');
+      toast.error('请输入价格');
       return;
     }
 
     if (!quantity) {
-      alert('请输入数量');
+      toast.error('请输入数量');
       return;
     }
     
@@ -107,12 +121,12 @@ export default function OrderForm({ symbol, currentPrice, onSubmit, isAuthentica
     
     // 验证价格和数量为正数
     if (priceValue <= 0) {
-      alert('价格必须大于0');
+      toast.error('价格必须大于0');
       return;
     }
     
     if (quantityValue <= 0) {
-      alert('数量必须大于0');
+      toast.error('数量必须大于0');
       return;
     }
 
@@ -122,12 +136,20 @@ export default function OrderForm({ symbol, currentPrice, onSubmit, isAuthentica
     
     if (balance) {
       const available = parseFloat(balance.available);
+      
+      // 市价单使用当前价格，限价单使用输入价格
+      const effectivePrice = orderType === 'market' 
+        ? parseFloat(currentPrice || '0')
+        : parseFloat(price || '0');
+      
       const required = side === 'buy' 
-        ? parseFloat(price || currentPrice || '0') * parseFloat(quantity)
+        ? effectivePrice * parseFloat(quantity)
         : parseFloat(quantity);
       
       if (available < required) {
-        alert(`余额不足，可用 ${available.toFixed(8)} ${asset}`);
+        // USDT显示2位小数，其他币种4位
+        const decimals = asset === 'USDT' ? 2 : 4;
+        toast.error(`余额不足，可用 ${available.toFixed(decimals)} ${asset}`);
         return;
       }
     }

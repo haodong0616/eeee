@@ -1,23 +1,30 @@
 import { ethers } from 'ethers';
-import { USDT_ABI, USDT_CONTRACT_ADDRESS, PLATFORM_DEPOSIT_ADDRESS, USDT_DECIMALS } from './usdt';
+import { USDT_ABI } from '../chains/config';
+import type { ChainConfig } from '../services/api';
 
 /**
- * 充值服务
+ * 充值服务（支持多链）
  */
 export class DepositService {
   /**
    * 执行 USDT 充值转账
    * @param provider Web3 Provider
    * @param amount 充值金额（USDT）
+   * @param chainConfig 链配置（从后端获取）
    * @returns 交易 hash
    */
   static async depositUSDT(
     provider: any,
-    amount: string
+    amount: string,
+    chainConfig: ChainConfig
   ): Promise<string> {
     try {
       if (!provider) {
         throw new Error('Please connect wallet first');
+      }
+
+      if (!chainConfig) {
+        throw new Error('Chain config is required');
       }
 
       // 创建以太坊 provider
@@ -25,25 +32,35 @@ export class DepositService {
       const signer = await ethersProvider.getSigner();
       const userAddress = await signer.getAddress();
 
+      // 获取网络信息
+      const network = await ethersProvider.getNetwork();
+      const currentChainId = Number(network.chainId);
+      
+      // 验证用户在正确的链上
+      if (currentChainId !== chainConfig.chain_id) {
+        throw new Error(`Please switch to ${chainConfig.chain_name} (Chain ID: ${chainConfig.chain_id})`);
+      }
+
       console.log('💰 开始充值流程');
+      console.log('链:', chainConfig.chain_name);
       console.log('用户地址:', userAddress);
       console.log('充值金额:', amount, 'USDT');
-      console.log('平台地址:', PLATFORM_DEPOSIT_ADDRESS);
+      console.log('平台地址:', chainConfig.platform_deposit_address);
 
       // 创建 USDT 合约实例
       const usdtContract = new ethers.Contract(
-        USDT_CONTRACT_ADDRESS,
+        chainConfig.usdt_contract_address,
         USDT_ABI,
         signer
       );
 
       // 检查用户 USDT 余额
       const balance = await usdtContract.balanceOf(userAddress);
-      const balanceInUSDT = ethers.formatUnits(balance, USDT_DECIMALS);
+      const balanceInUSDT = ethers.formatUnits(balance, chainConfig.usdt_decimals);
       console.log('当前 USDT 余额:', balanceInUSDT);
 
       // 转换金额为 wei
-      const amountInWei = ethers.parseUnits(amount, USDT_DECIMALS);
+      const amountInWei = ethers.parseUnits(amount, chainConfig.usdt_decimals);
 
       // 检查余额是否足够
       if (balance < amountInWei) {
@@ -53,7 +70,7 @@ export class DepositService {
       // 执行转账
       console.log('🔄 发送转账交易...');
       const tx = await usdtContract.transfer(
-        PLATFORM_DEPOSIT_ADDRESS,
+        chainConfig.platform_deposit_address,
         amountInWei
       );
 
@@ -82,22 +99,29 @@ export class DepositService {
    * 查询 USDT 余额
    * @param provider Web3 Provider
    * @param address 钱包地址
+   * @param chainConfig 链配置
    * @returns USDT 余额
    */
   static async getUSDTBalance(
     provider: any,
-    address: string
+    address: string,
+    chainConfig?: ChainConfig
   ): Promise<string> {
     try {
+      if (!chainConfig) {
+        return '0';
+      }
+
       const ethersProvider = new ethers.BrowserProvider(provider);
+
       const usdtContract = new ethers.Contract(
-        USDT_CONTRACT_ADDRESS,
+        chainConfig.usdt_contract_address,
         USDT_ABI,
         ethersProvider
       );
 
       const balance = await usdtContract.balanceOf(address);
-      return ethers.formatUnits(balance, USDT_DECIMALS);
+      return ethers.formatUnits(balance, chainConfig.usdt_decimals);
     } catch (error) {
       console.error('获取余额失败:', error);
       return '0';
