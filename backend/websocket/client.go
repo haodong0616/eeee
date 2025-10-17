@@ -11,7 +11,7 @@ const (
 	writeWait      = 10 * time.Second
 	pongWait       = 60 * time.Second
 	pingPeriod     = (pongWait * 9) / 10
-	maxMessageSize = 512
+	maxMessageSize = 512 * 1024 // 512KB，足够大的消息限制
 )
 
 type Client struct {
@@ -30,6 +30,7 @@ func NewClient(hub *Hub, conn *websocket.Conn) *Client {
 
 func (c *Client) ReadPump() {
 	defer func() {
+		log.Printf("📤 Client disconnected")
 		c.hub.unregister <- c
 		c.conn.Close()
 	}()
@@ -41,15 +42,19 @@ func (c *Client) ReadPump() {
 		return nil
 	})
 
+	log.Printf("📥 Client connected, waiting for messages...")
+
 	for {
 		_, message, err := c.conn.ReadMessage()
 		if err != nil {
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
-				log.Printf("WebSocket error: %v", err)
+				log.Printf("❌ WebSocket unexpected close error: %v", err)
+			} else {
+				log.Printf("⚠️  WebSocket closed: %v", err)
 			}
 			break
 		}
-		log.Printf("Received message: %s", message)
+		log.Printf("📨 Received message: %s", message)
 	}
 }
 

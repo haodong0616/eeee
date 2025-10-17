@@ -36,17 +36,45 @@ app.prepare().then(() => {
         // 连接到后端 WebSocket
         const backendWs = new WebSocket(`ws://${BACKEND_URL}/ws`);
 
-        // 前端 -> 后端
-        ws.on('message', (data) => {
+        // 前端 -> 后端（数据消息）
+        ws.on('message', (data, isBinary) => {
           if (backendWs.readyState === WebSocket.OPEN) {
-            backendWs.send(data);
+            backendWs.send(data, { binary: isBinary });
           }
         });
 
-        // 后端 -> 前端
-        backendWs.on('message', (data) => {
+        // 后端 -> 前端（数据消息）
+        backendWs.on('message', (data, isBinary) => {
           if (ws.readyState === WebSocket.OPEN) {
-            ws.send(data);
+            ws.send(data, { binary: isBinary });
+          }
+        });
+
+        // 前端 -> 后端（Ping）
+        ws.on('ping', (data) => {
+          if (backendWs.readyState === WebSocket.OPEN) {
+            backendWs.ping(data);
+          }
+        });
+
+        // 后端 -> 前端（Ping）
+        backendWs.on('ping', (data) => {
+          if (ws.readyState === WebSocket.OPEN) {
+            ws.ping(data);
+          }
+        });
+
+        // 前端 -> 后端（Pong）
+        ws.on('pong', (data) => {
+          if (backendWs.readyState === WebSocket.OPEN) {
+            backendWs.pong(data);
+          }
+        });
+
+        // 后端 -> 前端（Pong）
+        backendWs.on('pong', (data) => {
+          if (ws.readyState === WebSocket.OPEN) {
+            ws.pong(data);
           }
         });
 
@@ -67,11 +95,13 @@ app.prepare().then(() => {
         });
 
         // 关闭处理
-        ws.on('close', () => {
+        ws.on('close', (code, reason) => {
+          console.log(`📤 前端连接关闭 [${code}]: ${reason}`);
           backendWs.close();
         });
 
-        backendWs.on('close', () => {
+        backendWs.on('close', (code, reason) => {
+          console.log(`📤 后端连接关闭 [${code}]: ${reason}`);
           ws.close();
         });
       });
