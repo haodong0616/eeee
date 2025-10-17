@@ -79,6 +79,18 @@ export default function TradePage() {
     // 监听订单簿更新（实时推送）
     const handleOrderBookUpdate = (data: any) => {
       if (data.symbol === symbol) {
+        // 调试：显示前3档价格，确认排序
+        if (data.bids?.length > 0 && data.asks?.length > 0) {
+          console.log('📊 盘口排序检查:', {
+            买1: data.bids[0]?.price,
+            买2: data.bids[1]?.price,
+            买3: data.bids[2]?.price,
+            卖1: data.asks[0]?.price,
+            卖2: data.asks[1]?.price,
+            卖3: data.asks[2]?.price,
+          });
+        }
+        
         setOrderBook({
           symbol: data.symbol,
           bids: data.bids || [],

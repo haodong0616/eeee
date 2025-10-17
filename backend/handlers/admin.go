@@ -357,17 +357,19 @@ func (h *AdminHandler) GetAllTrades(c *gin.Context) {
 }
 
 type CreateTradingPairRequest struct {
-	Symbol          string  `json:"symbol" binding:"required"`
-	BaseAsset       string  `json:"base_asset" binding:"required"`
-	QuoteAsset      string  `json:"quote_asset" binding:"required"`
-	MinPrice        string  `json:"min_price"`
-	MaxPrice        string  `json:"max_price"`
-	MinQty          string  `json:"min_qty"`
-	MaxQty          string  `json:"max_qty"`
-	ActivityLevel   *int    `json:"activity_level"`   // 活跃度等级
-	OrderbookDepth  *int    `json:"orderbook_depth"`  // 订单簿深度
-	TradeFrequency  *int    `json:"trade_frequency"`  // 成交频率
-	PriceVolatility *string `json:"price_volatility"` // 价格波动率
+	Symbol             string  `json:"symbol" binding:"required"`
+	BaseAsset          string  `json:"base_asset" binding:"required"`
+	QuoteAsset         string  `json:"quote_asset" binding:"required"`
+	MinPrice           string  `json:"min_price"`
+	MaxPrice           string  `json:"max_price"`
+	MinQty             string  `json:"min_qty"`
+	MaxQty             string  `json:"max_qty"`
+	ActivityLevel      *int    `json:"activity_level"`        // 活跃度等级
+	OrderbookDepth     *int    `json:"orderbook_depth"`       // 订单簿深度
+	TradeFrequency     *int    `json:"trade_frequency"`       // 成交频率
+	PriceVolatility    *string `json:"price_volatility"`      // 价格波动率
+	VirtualTradePer10s *int    `json:"virtual_trade_per_10s"` // 虚拟成交频率（每10秒N笔）
+	PriceSpreadRatio   *string `json:"price_spread_ratio"`    // 盘口价格分布范围倍数
 }
 
 // 创建交易对
@@ -503,6 +505,13 @@ func (h *AdminHandler) UpdateTradingPair(c *gin.Context) {
 	if req.PriceVolatility != nil {
 		volatility, _ := decimal.NewFromString(*req.PriceVolatility)
 		pair.PriceVolatility = volatility
+	}
+	if req.VirtualTradePer10s != nil {
+		pair.VirtualTradePer10s = *req.VirtualTradePer10s
+	}
+	if req.PriceSpreadRatio != nil {
+		spreadRatio, _ := decimal.NewFromString(*req.PriceSpreadRatio)
+		pair.PriceSpreadRatio = spreadRatio
 	}
 
 	if err := database.DB.Save(&pair).Error; err != nil {

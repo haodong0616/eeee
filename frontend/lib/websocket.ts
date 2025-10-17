@@ -41,9 +41,16 @@ export class WebSocketClient {
     this.ws.onmessage = (event) => {
       try {
         const message = JSON.parse(event.data);
+        
+        // 调试日志：显示收到的消息
+        console.log(`📩 WebSocket收到消息 [${message.type}]:`, message.data);
+        
         const handlers = this.handlers.get(message.type);
         if (handlers) {
+          console.log(`✅ 执行${handlers.length}个处理器`);
           handlers.forEach((handler) => handler(message.data));
+        } else {
+          console.log(`⚠️ 没有${message.type}类型的处理器`);
         }
       } catch (error) {
         console.error('Failed to parse WebSocket message:', error);

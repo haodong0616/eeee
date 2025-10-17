@@ -65,6 +65,7 @@ func (h *Hub) BroadcastTrade(data interface{}) {
 		Type: "trade",
 		Data: data,
 	}
+	log.Printf("📡 推送trade消息（客户端数: %d）", len(h.clients))
 	h.broadcastMessage(message)
 }
 
@@ -73,6 +74,7 @@ func (h *Hub) BroadcastOrderBook(data interface{}) {
 		Type: "orderbook",
 		Data: data,
 	}
+	log.Printf("📡 推送orderbook消息（客户端数: %d）", len(h.clients))
 	h.broadcastMessage(message)
 }
 

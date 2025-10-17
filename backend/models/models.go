@@ -45,12 +45,14 @@ type TradingPair struct {
 	Status           string          `gorm:"size:20;default:'active'" json:"status"` // active, inactive
 	SimulatorEnabled bool            `gorm:"default:false" json:"simulator_enabled"` // 是否启用市场模拟器
 	// 活跃度配置（1-10，默认5）
-	ActivityLevel   int             `gorm:"default:5" json:"activity_level"`                         // 1=低活跃度, 5=中等, 10=高活跃度
-	OrderbookDepth  int             `gorm:"default:15" json:"orderbook_depth"`                       // 订单簿档位数（5-30）
-	TradeFrequency  int             `gorm:"default:20" json:"trade_frequency"`                       // 成交间隔秒数（5-60）
-	PriceVolatility decimal.Decimal `gorm:"type:decimal(10,4);default:0.01" json:"price_volatility"` // 价格波动率（0.001-0.05）
-	CreatedAt       time.Time       `json:"created_at"`
-	UpdatedAt       time.Time       `json:"updated_at"`
+	ActivityLevel      int             `gorm:"default:5" json:"activity_level"`                          // 1=低活跃度, 5=中等, 10=高活跃度
+	OrderbookDepth     int             `gorm:"default:15" json:"orderbook_depth"`                        // 订单簿档位数（5-30）
+	TradeFrequency     int             `gorm:"default:20" json:"trade_frequency"`                        // 成交间隔秒数（5-60）
+	PriceVolatility    decimal.Decimal `gorm:"type:decimal(10,4);default:0.01" json:"price_volatility"`  // 价格波动率（0.001-0.05）
+	VirtualTradePer10s int             `gorm:"default:10" json:"virtual_trade_per_10s"`                  // 虚拟成交频率（每10秒N笔，1-30）
+	PriceSpreadRatio   decimal.Decimal `gorm:"type:decimal(10,2);default:1.0" json:"price_spread_ratio"` // 盘口价格分布范围倍数（0.5-5.0）
+	CreatedAt          time.Time       `json:"created_at"`
+	UpdatedAt          time.Time       `json:"updated_at"`
 }
 
 func (t *TradingPair) BeforeCreate(tx *gorm.DB) error {

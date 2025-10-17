@@ -56,6 +56,8 @@ export default function PairsPage() {
     orderbook_depth: 15,
     trade_frequency: 20,
     price_volatility: '0.01',
+    virtual_trade_per_10s: 10,
+    price_spread_ratio: '1.0',
   });
 
   // 初始化默认时间范围
@@ -125,6 +127,8 @@ export default function PairsPage() {
       orderbook_depth: pair.orderbook_depth || 15,
       trade_frequency: pair.trade_frequency || 20,
       price_volatility: pair.price_volatility || '0.01',
+      virtual_trade_per_10s: pair.virtual_trade_per_10s || 10,
+      price_spread_ratio: pair.price_spread_ratio || '1.0',
     });
     setShowEditModal(true);
   };
@@ -511,7 +515,7 @@ export default function PairsPage() {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-[#0f1429] rounded-lg p-6 w-[500px] border border-gray-800">
             <h2 className="text-xl font-bold mb-4">编辑交易对</h2>
-            <form onSubmit={handleEditSubmit} className="space-y-4">
+            <form onSubmit={handleEditSubmit} className="space-y-3">
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm text-gray-400 mb-2">交易对符号</label>
@@ -597,18 +601,14 @@ export default function PairsPage() {
               </div>
 
               {/* 活跃度配置 */}
-              <div className="border-t border-gray-800 pt-4 mt-4">
-                <h3 className="text-lg font-bold mb-4 text-primary">🎮 活跃度配置</h3>
+              <div className="border-t border-gray-800 pt-3 mt-3">
+                <h3 className="text-base font-bold mb-3 text-primary">🎮 活跃度配置</h3>
                 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-3 gap-3">
                   <div>
-                    <label className="block text-sm text-gray-400 mb-2">
-                      活跃度等级 (1-10)
-                      <span className="text-xs ml-2">
-                        {editFormData.activity_level <= 3 ? '🐢低' : 
-                         editFormData.activity_level <= 6 ? '🚶中' : 
-                         editFormData.activity_level <= 8 ? '🏃高' : '🚀极高'}
-                      </span>
+                    <label className="block text-xs text-gray-400 mb-1">
+                      活跃度 <span className="text-primary">{editFormData.activity_level}</span>
+                      {editFormData.activity_level <= 3 ? '🐢' : editFormData.activity_level <= 6 ? '🚶' : editFormData.activity_level <= 8 ? '🏃' : '🚀'}
                     </label>
                     <input
                       type="range"
@@ -618,43 +618,43 @@ export default function PairsPage() {
                       onChange={(e) => setEditFormData({ ...editFormData, activity_level: parseInt(e.target.value) })}
                       className="w-full"
                     />
-                    <div className="flex justify-between text-xs text-gray-500 mt-1">
-                      <span>1</span>
-                      <span className="font-bold text-primary">{editFormData.activity_level}</span>
-                      <span>10</span>
-                    </div>
                   </div>
 
                   <div>
-                    <label className="block text-sm text-gray-400 mb-2">订单簿深度 (5-30档)</label>
+                    <label className="block text-xs text-gray-400 mb-1">盘口深度</label>
                     <input
                       type="number"
                       min="5"
                       max="30"
                       value={editFormData.orderbook_depth}
                       onChange={(e) => setEditFormData({ ...editFormData, orderbook_depth: parseInt(e.target.value) })}
-                      className="w-full px-4 py-2 bg-[#151a35] border border-gray-700 rounded-lg"
+                      className="w-full px-3 py-1.5 bg-[#151a35] border border-gray-700 rounded text-sm"
                     />
-                    <div className="text-xs text-gray-500 mt-1">买{editFormData.orderbook_depth}档 + 卖{editFormData.orderbook_depth}档 = {editFormData.orderbook_depth * 2}个订单</div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs text-gray-400 mb-1">
+                      虚拟成交/10秒
+                      <span className="text-xs ml-1">
+                        {editFormData.virtual_trade_per_10s <= 5 ? '🐌' : 
+                         editFormData.virtual_trade_per_10s <= 15 ? '🚶' : 
+                         editFormData.virtual_trade_per_10s <= 25 ? '🏃' : '🚀'}
+                      </span>
+                    </label>
+                    <input
+                      type="number"
+                      min="1"
+                      max="30"
+                      value={editFormData.virtual_trade_per_10s}
+                      onChange={(e) => setEditFormData({ ...editFormData, virtual_trade_per_10s: parseInt(e.target.value) })}
+                      className="w-full px-3 py-1.5 bg-[#151a35] border border-gray-700 rounded text-sm"
+                    />
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4 mt-4">
+                <div className="grid grid-cols-2 gap-3 mt-3">
                   <div>
-                    <label className="block text-sm text-gray-400 mb-2">成交频率 (5-60秒)</label>
-                    <input
-                      type="number"
-                      min="5"
-                      max="60"
-                      value={editFormData.trade_frequency}
-                      onChange={(e) => setEditFormData({ ...editFormData, trade_frequency: parseInt(e.target.value) })}
-                      className="w-full px-4 py-2 bg-[#151a35] border border-gray-700 rounded-lg"
-                    />
-                    <div className="text-xs text-gray-500 mt-1">实际: {Math.floor(editFormData.trade_frequency * 0.7)}-{Math.ceil(editFormData.trade_frequency * 1.3)}秒</div>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm text-gray-400 mb-2">价格波动率 (0.001-0.05)</label>
+                    <label className="block text-xs text-gray-400 mb-1">波动率</label>
                     <input
                       type="number"
                       min="0.001"
@@ -662,35 +662,53 @@ export default function PairsPage() {
                       step="0.001"
                       value={editFormData.price_volatility}
                       onChange={(e) => setEditFormData({ ...editFormData, price_volatility: e.target.value })}
-                      className="w-full px-4 py-2 bg-[#151a35] border border-gray-700 rounded-lg"
+                      className="w-full px-3 py-1.5 bg-[#151a35] border border-gray-700 rounded text-sm"
                     />
-                    <div className="text-xs text-gray-500 mt-1">{(parseFloat(editFormData.price_volatility) * 100).toFixed(1)}% 基础波动</div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs text-gray-400 mb-1">
+                      价格范围倍数
+                      <span className="text-xs ml-1">
+                        {parseFloat(editFormData.price_spread_ratio) <= 0.8 ? '📍窄' : 
+                         parseFloat(editFormData.price_spread_ratio) <= 1.5 ? '📊正常' : 
+                         parseFloat(editFormData.price_spread_ratio) <= 3 ? '📈宽' : '📊超宽'}
+                      </span>
+                    </label>
+                    <input
+                      type="number"
+                      min="0.5"
+                      max="5"
+                      step="0.1"
+                      value={editFormData.price_spread_ratio}
+                      onChange={(e) => setEditFormData({ ...editFormData, price_spread_ratio: e.target.value })}
+                      className="w-full px-3 py-1.5 bg-[#151a35] border border-gray-700 rounded text-sm"
+                    />
                   </div>
                 </div>
 
-              <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-3 mt-4">
+              <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-2 mt-3">
                 <div className="text-xs text-blue-400">
-                  <div className="font-bold mb-1">💡 预计效果：</div>
-                  <div>• 订单簿每 <strong>
-                    {editFormData.activity_level >= 9 ? '1秒 🚀' : Math.max(2, 22 - editFormData.activity_level * 2) + '秒'}
-                  </strong> 更新一次</div>
-                  <div>• 价格分布范围: ±<strong>{(parseFloat(editFormData.price_volatility) * editFormData.activity_level * 50).toFixed(1)}%</strong></div>
-                  <div>• 成交量波动: <strong>{editFormData.activity_level <= 3 ? '小' : editFormData.activity_level <= 6 ? '中等' : editFormData.activity_level >= 9 ? '极大 🔥' : '大'}</strong></div>
+                  💡 盘口每 <strong>
+                    {editFormData.activity_level >= 9 ? '1秒' : Math.max(2, 22 - editFormData.activity_level * 2) + '秒'}
+                  </strong> 刷新，虚拟成交 <strong>{editFormData.virtual_trade_per_10s}笔/10秒</strong>
+                  ({(editFormData.virtual_trade_per_10s / 10).toFixed(1)}笔/秒)，
+                  盘口价格范围 ±<strong>{(parseFloat(editFormData.price_volatility) * parseFloat(editFormData.price_spread_ratio) * 100).toFixed(1)}%</strong>
                 </div>
               </div>
               </div>
 
-              <div className="flex space-x-4">
+              <div className="flex space-x-3 mt-4 pt-3 border-t border-gray-800">
                 <button
                   type="submit"
-                  className="flex-1 px-4 py-2 bg-primary hover:bg-primary-dark rounded-lg transition"
+                  className="flex-1 px-4 py-2 bg-primary hover:bg-primary-dark rounded-lg transition font-bold"
                 >
-                  更新
+                  💾 保存更新
                 </button>
                 <button
                   type="button"
                   onClick={() => setShowEditModal(false)}
-                  className="flex-1 px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg transition"
+                  className="px-6 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg transition"
                 >
                   取消
                 </button>

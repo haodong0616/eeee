@@ -1,4 +1,17 @@
-// 根据价格自动调整小数位精度
+/**
+ * 根据价格自动调整小数位精度
+ * 
+ * ⚠️ 重要：此规则必须与后端保持完全一致
+ * 后端对应文件: backend/utils/price.go -> GetPricePrecision()
+ * 
+ * 价格精度规则：
+ * - >= $1,000:   2位小数 (如 8,500.00)
+ * - >= $100:     2位小数 (如 125.50)
+ * - >= $1:       3位小数 (如 45.500)
+ * - >= $0.01:    4位小数 (如 0.0850)
+ * - >= $0.0001:  6位小数 (如 0.008500)
+ * - < $0.0001:   8位小数 (如 0.00008500)
+ */
 export function formatPrice(price: string | number): string {
   const numPrice = typeof price === 'string' ? parseFloat(price) : price;
   
@@ -8,24 +21,31 @@ export function formatPrice(price: string | number): string {
 
   // 根据价格区间决定小数位
   if (numPrice >= 1000) {
-    // >= $1,000: 2位小数 (如 8,500.00)
     return numPrice.toFixed(2);
   } else if (numPrice >= 100) {
-    // >= $100: 2位小数 (如 125.50)
     return numPrice.toFixed(2);
   } else if (numPrice >= 1) {
-    // >= $1: 3位小数 (如 45.500)
     return numPrice.toFixed(3);
   } else if (numPrice >= 0.01) {
-    // >= $0.01: 4位小数 (如 0.0850)
     return numPrice.toFixed(4);
   } else if (numPrice >= 0.0001) {
-    // >= $0.0001: 6位小数 (如 0.008500)
     return numPrice.toFixed(6);
   } else {
-    // < $0.0001: 8位小数 (如 0.00008500)
     return numPrice.toFixed(8);
   }
+}
+
+/**
+ * 获取价格精度（小数位数）
+ * 与 formatPrice 使用相同的规则
+ */
+export function getPricePrecision(price: number): number {
+  if (price >= 1000) return 2;
+  if (price >= 100) return 2;
+  if (price >= 1) return 3;
+  if (price >= 0.01) return 4;
+  if (price >= 0.0001) return 6;
+  return 8;
 }
 
 // 格式化数量（根据交易对调整）

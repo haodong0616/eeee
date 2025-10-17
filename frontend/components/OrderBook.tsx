@@ -30,7 +30,7 @@ export default function OrderBook({ orderBook, onPriceClick, symbol }: OrderBook
       </div>
 
       <div className="p-1 lg:p-2">
-        {/* 卖单（从低到高，倒序显示） */}
+        {/* 卖单（从高到低显示，远离市价在上方） */}
         <div className="mb-1 lg:mb-2">
           <div className="grid grid-cols-3 gap-1 text-[9px] lg:text-[10px] text-gray-500 mb-1 px-1">
             <div className="text-right">价格</div>
@@ -38,7 +38,7 @@ export default function OrderBook({ orderBook, onPriceClick, symbol }: OrderBook
             <div className="text-right">总计</div>
           </div>
           <div className="space-y-[1px] lg:space-y-[2px]">
-            {[...asks].reverse().slice(0, displayLimit).map((ask, index) => (
+            {[...asks].slice(0, displayLimit).reverse().map((ask, index) => (
               <div
                 key={index}
                 className="grid grid-cols-3 gap-1 text-[10px] lg:text-xs hover:bg-[#1a1f3a] px-1 py-[1px] lg:py-[2px] rounded cursor-pointer transition-all hover:scale-[1.02]"

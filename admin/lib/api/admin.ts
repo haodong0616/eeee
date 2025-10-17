@@ -54,6 +54,8 @@ export interface TradingPair {
   orderbook_depth?: number;     // 5-30，默认15
   trade_frequency?: number;     // 5-60秒，默认20
   price_volatility?: string;    // 0.001-0.05，默认0.01
+  virtual_trade_per_10s?: number; // 1-30笔/10秒，默认10
+  price_spread_ratio?: string;  // 0.5-10.0倍，默认2.0
   created_at: string;
   updated_at: string;
 }
@@ -228,6 +230,8 @@ export const batchUpdatePairsActivity = async (data: {
   orderbook_depth?: number;
   trade_frequency?: number;
   price_volatility?: string;
+  virtual_trade_per_10s?: number;
+  price_spread_ratio?: string;
 }) => {
   const response = await axios.post('/admin/pairs/batch-activity', data);
   return response.data;
