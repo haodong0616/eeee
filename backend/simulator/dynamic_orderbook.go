@@ -7,6 +7,8 @@ import (
 	"expchange-backend/utils"
 	"log"
 	"math/rand"
+	"strings"
+	"sync"
 	"time"
 
 	"github.com/shopspring/decimal"
@@ -26,6 +28,8 @@ type DynamicOrderBookSimulator struct {
 	activePairs      map[string]bool                // 当前活跃的模拟交易对
 	pairConfigs      map[string]*models.TradingPair // 缓存交易对配置
 	configUpdateChan chan string                    // 配置更新通知通道
+	priceAdjustment  map[string]float64             // 每个交易对的价格调整系数（-0.05 到 +0.05）
+	adjustmentMutex  sync.RWMutex                   // 价格调整系数的读写锁
 }
 
 func NewDynamicOrderBookSimulator(matchingManager *matching.Manager, wsHub interface {
@@ -75,6 +79,7 @@ func NewDynamicOrderBookSimulator(matchingManager *matching.Manager, wsHub inter
 		activePairs:      make(map[string]bool),
 		pairConfigs:      make(map[string]*models.TradingPair),
 		configUpdateChan: make(chan string, 100),
+		priceAdjustment:  make(map[string]float64), // 初始化价格调整map
 	}
 }
 
@@ -91,6 +96,9 @@ func (s *DynamicOrderBookSimulator) Start() {
 
 	// 做市商循环：定期吃掉真实用户的挂单
 	go s.marketMakerLoop()
+
+	// 价格区间平衡器：根据盈亏动态调整价格区间
+	go s.priceBalancer()
 }
 
 func (s *DynamicOrderBookSimulator) Stop() {
@@ -285,11 +293,11 @@ func (s *DynamicOrderBookSimulator) createOrdersWithConfig(symbol string, pair *
 	log.Printf("📚 %s 订单簿已更新 (市价:%.8f, 买档:%d, 卖档:%d)",
 		symbol, currentPrice, pair.OrderbookDepth, pair.OrderbookDepth)
 
-	// 推送订单簿更新到WebSocket（实时推送）
+	// 推送订单簿更新到WebSocket（从数据库查询虚拟订单）
 	if s.wsHub != nil {
-		orderbook := s.matchingManager.GetOrderBook(symbol, 50) // 获取50档深度
+		orderbook := s.getOrderBookFromDB(symbol, 50)
 
-		// 转换为JSON友好格式（确保价格是字符串）
+		// 转换为JSON友好格式
 		bids := make([]map[string]string, 0, len(orderbook.Bids))
 		for _, bid := range orderbook.Bids {
 			bids = append(bids, map[string]string{
@@ -306,7 +314,7 @@ func (s *DynamicOrderBookSimulator) createOrdersWithConfig(symbol string, pair *
 			})
 		}
 
-		// 调试日志：显示前3档价格，确认排序
+		// 调试日志
 		if len(bids) >= 3 && len(asks) >= 3 {
 			log.Printf("📊 %s 推送盘口 - 买盘[%s, %s, %s] 卖盘[%s, %s, %s]",
 				symbol,
@@ -316,8 +324,8 @@ func (s *DynamicOrderBookSimulator) createOrdersWithConfig(symbol string, pair *
 
 		s.wsHub.BroadcastOrderBook(map[string]interface{}{
 			"symbol": symbol,
-			"bids":   bids, // 已排序：价格从高到低
-			"asks":   asks, // 已排序：价格从低到高
+			"bids":   bids,
+			"asks":   asks,
 		})
 	}
 }
@@ -333,27 +341,6 @@ func (s *DynamicOrderBookSimulator) createBuyOrders(symbol string, currentPrice 
 
 // createBuyOrdersWithConfig 使用配置创建买单
 func (s *DynamicOrderBookSimulator) createBuyOrdersWithConfig(symbol string, currentPrice float64, pair *models.TradingPair) {
-	// 1. 查询真实用户的最低卖单价格（虚拟买单不能高于这个价格）
-	var lowestRealSellOrder models.Order
-	err := database.DB.Session(&gorm.Session{Logger: database.DB.Logger.LogMode(logger.Silent)}).
-		Where("symbol = ? AND user_id != ? AND status = ? AND side = 'sell'",
-			symbol, s.virtualUserID, "pending").
-		Order("price ASC").
-		First(&lowestRealSellOrder).Error
-
-	// 2. 确定虚拟买单的最高价格上限
-	var maxVirtualBuyPrice float64
-	if err == nil {
-		// 如果有真实卖单，虚拟买单价格必须低于真实卖单（避免埋掉真实卖单）
-		lowestRealPrice, _ := lowestRealSellOrder.Price.Float64()
-		maxVirtualBuyPrice = lowestRealPrice * 0.999 // 留0.1%的价差
-		log.Printf("🔍 %s 发现真实卖单 @ %.8f，虚拟买单上限: %.8f", symbol, lowestRealPrice, maxVirtualBuyPrice)
-	} else {
-		// 没有真实卖单，可以接近市价
-		maxVirtualBuyPrice = currentPrice * 0.999
-	}
-
-	// 使用配置的档位数（默认15，范围5-30）
 	levels := pair.OrderbookDepth
 	if levels < 5 {
 		levels = 5
@@ -362,28 +349,26 @@ func (s *DynamicOrderBookSimulator) createBuyOrdersWithConfig(symbol string, cur
 		levels = 30
 	}
 
-	// 使用配置的波动率（默认0.01=1%）
 	volatility, _ := pair.PriceVolatility.Float64()
 	if volatility <= 0 {
 		volatility = 0.01
 	}
 
-	// 根据价格分布范围倍数调整价格分布
 	spreadRatio, _ := pair.PriceSpreadRatio.Float64()
 	if spreadRatio <= 0 {
 		spreadRatio = 1.0
 	}
 	maxSpread := volatility * spreadRatio
 
-	for i := 1; i <= levels; i++ {
-		// 价格从maxVirtualBuyPrice向下递减
-		priceOffset := (maxSpread / float64(levels)) * float64(i)
-		price := maxVirtualBuyPrice * (1 - priceOffset)
+	// 获取价格调整系数
+	s.adjustmentMutex.RLock()
+	adjustment := s.priceAdjustment[symbol] // -0.05 到 +0.05
+	s.adjustmentMutex.RUnlock()
 
-		// 调试：打印前3档价格
-		if i <= 3 {
-			log.Printf("  买%d档: %.8f (上限:%.8f, 偏移:%.2f%%)", i, price, maxVirtualBuyPrice, priceOffset*100)
-		}
+	for i := 1; i <= levels; i++ {
+		// 价格从高到低递减，加上动态调整
+		priceOffset := (maxSpread / float64(levels)) * float64(i)
+		price := currentPrice * (1 - priceOffset + adjustment) // 加上调整系数
 
 		// 数量随距离增加
 		quantity := s.getQuantityForSymbol(symbol, currentPrice) * (1 + float64(i)*0.6)
@@ -404,10 +389,11 @@ func (s *DynamicOrderBookSimulator) createBuyOrdersWithConfig(symbol string, cur
 		}
 
 		database.DB.Create(&order)
-		s.matchingManager.AddOrder(&order) // 进入匹配引擎用于展示盘口
+		// ⚠️ 虚拟订单不进入匹配引擎（避免和真实订单自动匹配导致重复更新余额）
+		// s.matchingManager.AddOrder(&order)
 	}
 
-	log.Printf("📚 %s 虚拟买单已创建 (x%d档)", symbol, levels)
+	log.Printf("📚 %s 虚拟买单已创建 (x%d档，仅展示)", symbol, levels)
 }
 
 // createSellOrders 创建卖单（兼容旧调用）
@@ -421,27 +407,6 @@ func (s *DynamicOrderBookSimulator) createSellOrders(symbol string, currentPrice
 
 // createSellOrdersWithConfig 使用配置创建卖单
 func (s *DynamicOrderBookSimulator) createSellOrdersWithConfig(symbol string, currentPrice float64, pair *models.TradingPair) {
-	// 1. 查询真实用户的最高买单价格（虚拟卖单不能低于这个价格）
-	var highestRealBuyOrder models.Order
-	err := database.DB.Session(&gorm.Session{Logger: database.DB.Logger.LogMode(logger.Silent)}).
-		Where("symbol = ? AND user_id != ? AND status = ? AND side = 'buy'",
-			symbol, s.virtualUserID, "pending").
-		Order("price DESC").
-		First(&highestRealBuyOrder).Error
-
-	// 2. 确定虚拟卖单的最低价格下限
-	var minVirtualSellPrice float64
-	if err == nil {
-		// 如果有真实买单，虚拟卖单价格必须高于真实买单（避免埋掉真实买单）
-		highestRealPrice, _ := highestRealBuyOrder.Price.Float64()
-		minVirtualSellPrice = highestRealPrice * 1.001 // 留0.1%的价差
-		log.Printf("🔍 %s 发现真实买单 @ %.8f，虚拟卖单下限: %.8f", symbol, highestRealPrice, minVirtualSellPrice)
-	} else {
-		// 没有真实买单，可以接近市价
-		minVirtualSellPrice = currentPrice * 1.001
-	}
-
-	// 使用配置的档位数
 	levels := pair.OrderbookDepth
 	if levels < 5 {
 		levels = 5
@@ -450,28 +415,26 @@ func (s *DynamicOrderBookSimulator) createSellOrdersWithConfig(symbol string, cu
 		levels = 30
 	}
 
-	// 使用配置的波动率
 	volatility, _ := pair.PriceVolatility.Float64()
 	if volatility <= 0 {
 		volatility = 0.01
 	}
 
-	// 根据价格分布范围倍数调整价格分布
 	spreadRatio, _ := pair.PriceSpreadRatio.Float64()
 	if spreadRatio <= 0 {
 		spreadRatio = 1.0
 	}
 	maxSpread := volatility * spreadRatio
 
-	for i := 1; i <= levels; i++ {
-		// 价格从minVirtualSellPrice向上递增
-		priceOffset := (maxSpread / float64(levels)) * float64(i)
-		price := minVirtualSellPrice * (1 + priceOffset)
+	// 获取价格调整系数
+	s.adjustmentMutex.RLock()
+	adjustment := s.priceAdjustment[symbol]
+	s.adjustmentMutex.RUnlock()
 
-		// 调试：打印前3档价格
-		if i <= 3 {
-			log.Printf("  卖%d档: %.8f (下限:%.8f, 偏移:%.2f%%)", i, price, minVirtualSellPrice, priceOffset*100)
-		}
+	for i := 1; i <= levels; i++ {
+		// 价格从低到高递增，加上动态调整
+		priceOffset := (maxSpread / float64(levels)) * float64(i)
+		price := currentPrice * (1 + priceOffset + adjustment) // 加上调整系数
 
 		// 数量随距离增加
 		quantity := s.getQuantityForSymbol(symbol, currentPrice) * (1 + float64(i)*0.6)
@@ -492,10 +455,11 @@ func (s *DynamicOrderBookSimulator) createSellOrdersWithConfig(symbol string, cu
 		}
 
 		database.DB.Create(&order)
-		s.matchingManager.AddOrder(&order) // 进入匹配引擎用于展示盘口
+		// ⚠️ 虚拟订单不进入匹配引擎（避免和真实订单自动匹配导致重复更新余额）
+		// s.matchingManager.AddOrder(&order)
 	}
 
-	log.Printf("📚 %s 虚拟卖单已创建 (x%d档)", symbol, levels)
+	log.Printf("📚 %s 虚拟卖单已创建 (x%d档，仅展示)", symbol, levels)
 }
 
 // getQuantityForSymbol 根据交易对和价格计算合适的数量
@@ -598,9 +562,10 @@ func (s *DynamicOrderBookSimulator) simulateMarketTradeWithConfig(symbol string,
 	}
 
 	database.DB.Create(&order)
-	s.matchingManager.AddOrder(&order) // 进入匹配引擎
+	// ⚠️ 虚拟订单不进入匹配引擎
+	// s.matchingManager.AddOrder(&order)
 
-	log.Printf("💹 %s 模拟市价成交: %s %.8f @ %.8f", symbol, side, quantity, price)
+	log.Printf("💹 %s 虚拟订单: %s %.8f @ %.8f（仅展示）", symbol, side, quantity, price)
 }
 
 // marketMakerLoop 做市商循环 - 极速吃单模式 🚀
@@ -634,14 +599,14 @@ func (s *DynamicOrderBookSimulator) makeMarketForSymbol(symbol string) {
 	var sellOrders []models.Order
 
 	database.DB.Session(&gorm.Session{Logger: database.DB.Logger.LogMode(logger.Silent)}).
-		Where("symbol = ? AND user_id != ? AND status = ? AND side = 'buy'",
-					symbol, s.virtualUserID, "pending").
+		Where("symbol = ? AND user_id != ? AND status IN (?, ?) AND side = 'buy'",
+					symbol, s.virtualUserID, "pending", "partial"). // ⚠️ 包含部分成交的订单
 		Order("price DESC"). // 买单按价格从高到低排序
 		Find(&buyOrders)
 
 	database.DB.Session(&gorm.Session{Logger: database.DB.Logger.LogMode(logger.Silent)}).
-		Where("symbol = ? AND user_id != ? AND status = ? AND side = 'sell'",
-					symbol, s.virtualUserID, "pending").
+		Where("symbol = ? AND user_id != ? AND status IN (?, ?) AND side = 'sell'",
+					symbol, s.virtualUserID, "pending", "partial"). // ⚠️ 包含部分成交的订单
 		Order("price ASC"). // 卖单按价格从低到高排序
 		Find(&sellOrders)
 
@@ -780,10 +745,74 @@ func (s *DynamicOrderBookSimulator) eatSingleOrder(targetOrder *models.Order, cu
 	log.Printf("🎯 %s 对手单已创建: %s %s @ %s (ID:%s)",
 		symbol, matchingSide, eatQty.String(), matchingPrice.String(), matchingOrder.ID)
 
-	// ⚠️ 关键：直接通过匹配引擎提交，让引擎处理
-	s.matchingManager.AddOrder(&matchingOrder)
+	// ⚠️ 关键修改：手动创建Trade（通过虚拟用户ID识别，不加前缀）
+	trade := models.Trade{
+		Symbol:   symbol,
+		Price:    matchingPrice,
+		Quantity: eatQty,
+	}
 
-	log.Printf("  ✅ %s 已提交到匹配引擎，等待自动匹配...", symbol)
+	if matchingSide == "buy" {
+		trade.BuyOrderID = matchingOrder.ID
+		trade.SellOrderID = freshOrder.ID
+	} else {
+		trade.BuyOrderID = freshOrder.ID
+		trade.SellOrderID = matchingOrder.ID
+	}
+
+	if err := database.DB.Create(&trade).Error; err != nil {
+		log.Printf("❌ %s 创建Trade失败: %v", symbol, err)
+		return
+	}
+
+	log.Printf("  📝 Trade已创建: ID=%s (做市商成交，通过虚拟用户ID识别)", trade.ID)
+
+	// 手动更新订单状态
+	log.Printf("  📝 准备更新订单状态: 当前FilledQty=%s, 新增=%s", freshOrder.FilledQty.String(), eatQty.String())
+
+	freshOrder.FilledQty = freshOrder.FilledQty.Add(eatQty)
+	if freshOrder.FilledQty.Equal(freshOrder.Quantity) {
+		freshOrder.Status = "filled"
+	} else {
+		freshOrder.Status = "partial"
+	}
+
+	if err := database.DB.Save(&freshOrder).Error; err != nil {
+		log.Printf("❌ %s 更新真实订单失败: %v", symbol, err)
+		return
+	}
+
+	log.Printf("  ✅ 订单状态已更新: ID=%s, FilledQty=%s/%s, Status=%s",
+		freshOrder.ID, freshOrder.FilledQty.String(), freshOrder.Quantity.String(), freshOrder.Status)
+
+	// ⚠️ 关键：从匹配引擎中移除已成交的订单，避免重复匹配
+	if freshOrder.Status == "filled" {
+		s.matchingManager.CancelOrder(freshOrder.ID, symbol, freshOrder.Side)
+		log.Printf("  🗑️ 已从匹配引擎移除订单: ID=%s", freshOrder.ID)
+	}
+
+	matchingOrder.FilledQty = eatQty
+	matchingOrder.Status = "filled"
+	if err := database.DB.Save(&matchingOrder).Error; err != nil {
+		log.Printf("❌ %s 更新对手单失败: %v", symbol, err)
+		return
+	}
+
+	// 手动更新用户余额
+	s.updateUserBalances(&freshOrder, matchingPrice, eatQty)
+
+	log.Printf("  ✅ %s 手动成交完成: Trade ID=%s", symbol, trade.ID)
+
+	// 推送WebSocket
+	if s.wsHub != nil {
+		s.wsHub.BroadcastTrade(map[string]interface{}{
+			"symbol":     symbol,
+			"price":      matchingPrice.String(),
+			"quantity":   eatQty.String(),
+			"side":       matchingSide,
+			"created_at": trade.CreatedAt,
+		})
+	}
 
 	// 计算盈亏（与当前市价对比）
 	var profitLossUSDT decimal.Decimal
@@ -913,4 +942,253 @@ func (s *DynamicOrderBookSimulator) doCreateVirtualTrade(symbol string, pair *mo
 			"created_at": trade.CreatedAt,
 		})
 	}
+}
+
+// updateUserBalances 手动更新用户余额（做市商吃单专用）
+func (s *DynamicOrderBookSimulator) updateUserBalances(userOrder *models.Order, tradePrice decimal.Decimal, tradeQty decimal.Decimal) {
+	// 解析交易对
+	parts := strings.Split(userOrder.Symbol, "/")
+	if len(parts) != 2 {
+		return
+	}
+	baseAsset := parts[0]  // 例如 PULSE
+	quoteAsset := parts[1] // 例如 USDT
+
+	tradeValue := tradePrice.Mul(tradeQty) // 成交金额
+
+	log.Printf("  🔍 开始更新余额 - UserID:%s, Side:%s, 价格:%s, 数量:%s, 总值:%s",
+		userOrder.UserID, userOrder.Side, tradePrice.String(), tradeQty.String(), tradeValue.String())
+
+	if userOrder.Side == "buy" {
+		// 用户买入：扣USDT（frozen），加代币（available）
+		// 1. 查询当前USDT余额（静默模式）
+		var usdtBalance models.Balance
+		err := database.DB.Session(&gorm.Session{Logger: database.DB.Logger.LogMode(logger.Silent)}).
+			Where("user_id = ? AND asset = ?", userOrder.UserID, quoteAsset).First(&usdtBalance).Error
+		if err == nil {
+			log.Printf("  📊 买入前USDT: available=%s, frozen=%s", usdtBalance.Available.String(), usdtBalance.Frozen.String())
+		}
+
+		// 2. 扣除冻结的USDT
+		database.DB.Exec("UPDATE balances SET frozen = frozen - ?, updated_at = ? WHERE user_id = ? AND asset = ?",
+			tradeValue, time.Now(), userOrder.UserID, quoteAsset)
+
+		// 3. 增加代币余额（如果不存在则创建）
+		var baseBalance models.Balance
+		err = database.DB.Session(&gorm.Session{Logger: database.DB.Logger.LogMode(logger.Silent)}).
+			Where("user_id = ? AND asset = ?", userOrder.UserID, baseAsset).First(&baseBalance).Error
+		if err != nil {
+			log.Printf("  ➕ 创建%s余额记录: %s", baseAsset, tradeQty.String())
+			baseBalance = models.Balance{
+				UserID:    userOrder.UserID,
+				Asset:     baseAsset,
+				Available: tradeQty,
+				Frozen:    decimal.Zero,
+			}
+			database.DB.Create(&baseBalance)
+		} else {
+			log.Printf("  📊 买入前%s: available=%s, frozen=%s", baseAsset, baseBalance.Available.String(), baseBalance.Frozen.String())
+			baseBalance.Available = baseBalance.Available.Add(tradeQty)
+			database.DB.Save(&baseBalance)
+			log.Printf("  ✅ 买入后%s: available=%s（+%s）", baseAsset, baseBalance.Available.String(), tradeQty.String())
+		}
+	} else {
+		// 用户卖出：扣代币（frozen），加USDT（available）
+		// 1. 查询当前代币余额
+		var baseBalance models.Balance
+		err := database.DB.Session(&gorm.Session{Logger: database.DB.Logger.LogMode(logger.Silent)}).
+			Where("user_id = ? AND asset = ?", userOrder.UserID, baseAsset).First(&baseBalance).Error
+		if err == nil {
+			log.Printf("  📊 卖出前%s: available=%s, frozen=%s", baseAsset, baseBalance.Available.String(), baseBalance.Frozen.String())
+		}
+
+		// 2. 扣除冻结的代币
+		database.DB.Exec("UPDATE balances SET frozen = frozen - ?, updated_at = ? WHERE user_id = ? AND asset = ?",
+			tradeQty, time.Now(), userOrder.UserID, baseAsset)
+
+		// 3. 增加USDT余额
+		var quoteBalance models.Balance
+		err = database.DB.Session(&gorm.Session{Logger: database.DB.Logger.LogMode(logger.Silent)}).
+			Where("user_id = ? AND asset = ?", userOrder.UserID, quoteAsset).First(&quoteBalance).Error
+		if err != nil {
+			log.Printf("  ➕ 创建USDT余额记录: %s", tradeValue.String())
+			// 不存在，创建新记录
+			quoteBalance = models.Balance{
+				UserID:    userOrder.UserID,
+				Asset:     quoteAsset,
+				Available: tradeValue,
+				Frozen:    decimal.Zero,
+			}
+			database.DB.Create(&quoteBalance)
+		} else {
+			log.Printf("  📊 卖出前USDT: available=%s, frozen=%s", quoteBalance.Available.String(), quoteBalance.Frozen.String())
+			// 存在，更新余额
+			quoteBalance.Available = quoteBalance.Available.Add(tradeValue)
+			database.DB.Save(&quoteBalance)
+			log.Printf("  ✅ 卖出后USDT: available=%s（+%s）", quoteBalance.Available.String(), tradeValue.String())
+		}
+	}
+
+	log.Printf("  💰 用户余额已更新: UserID=%s", userOrder.UserID)
+}
+
+// getOrderBookFromDB 从数据库查询虚拟订单展示盘口
+func (s *DynamicOrderBookSimulator) getOrderBookFromDB(symbol string, depth int) *models.OrderBook {
+	var buyOrders []models.Order
+	var sellOrders []models.Order
+
+	database.DB.Where("symbol = ? AND user_id = ? AND status = ? AND side = 'buy'",
+		symbol, s.virtualUserID, "pending").
+		Order("price DESC").
+		Limit(depth).
+		Find(&buyOrders)
+
+	database.DB.Where("symbol = ? AND user_id = ? AND status = ? AND side = 'sell'",
+		symbol, s.virtualUserID, "pending").
+		Order("price ASC").
+		Limit(depth).
+		Find(&sellOrders)
+
+	orderBook := &models.OrderBook{
+		Symbol: symbol,
+		Bids:   []models.OrderBookItem{},
+		Asks:   []models.OrderBookItem{},
+	}
+
+	for _, order := range buyOrders {
+		orderBook.Bids = append(orderBook.Bids, models.OrderBookItem{
+			Price:    order.Price,
+			Quantity: order.Quantity,
+		})
+	}
+
+	for _, order := range sellOrders {
+		orderBook.Asks = append(orderBook.Asks, models.OrderBookItem{
+			Price:    order.Price,
+			Quantity: order.Quantity,
+		})
+	}
+
+	return orderBook
+}
+
+// priceBalancer 价格区间平衡器 - 根据做市商盈亏动态调整价格区间
+func (s *DynamicOrderBookSimulator) priceBalancer() {
+	ticker := time.NewTicker(30 * time.Second) // 每30秒检查一次
+	defer ticker.Stop()
+
+	log.Println("⚖️ 价格区间平衡器已启动，每30秒调整一次...")
+
+	for range ticker.C {
+		if !s.running {
+			return
+		}
+
+		for symbol := range s.activePairs {
+			s.adjustPriceRange(symbol)
+		}
+	}
+}
+
+// adjustPriceRange 调整单个交易对的价格区间
+func (s *DynamicOrderBookSimulator) adjustPriceRange(symbol string) {
+	// 1. 统计最近5分钟的做市商盈亏
+	fiveMinAgo := time.Now().Add(-5 * time.Minute)
+
+	var buyCount int64
+	var sellCount int64
+	var buyVolume, sellVolume decimal.Decimal
+
+	// 统计买入（做市商买入 = 吃掉用户卖单）
+	database.DB.Model(&models.MarketMakerPnL{}).
+		Where("symbol = ? AND side = 'buy' AND created_at >= ?", symbol, fiveMinAgo).
+		Count(&buyCount)
+	database.DB.Model(&models.MarketMakerPnL{}).
+		Where("symbol = ? AND side = 'buy' AND created_at >= ?", symbol, fiveMinAgo).
+		Select("COALESCE(SUM(quantity), 0)").
+		Scan(&buyVolume)
+
+	// 统计卖出（做市商卖出 = 吃掉用户买单）
+	database.DB.Model(&models.MarketMakerPnL{}).
+		Where("symbol = ? AND side = 'sell' AND created_at >= ?", symbol, fiveMinAgo).
+		Count(&sellCount)
+	database.DB.Model(&models.MarketMakerPnL{}).
+		Where("symbol = ? AND side = 'sell' AND created_at >= ?", symbol, fiveMinAgo).
+		Select("COALESCE(SUM(quantity), 0)").
+		Scan(&sellVolume)
+
+	// 2. 计算不平衡度
+	totalCount := buyCount + sellCount
+	if totalCount == 0 {
+		return // 没有交易，不调整
+	}
+
+	// 卖出占比（做市商卖出 = 吃用户买单）
+	sellRatio := float64(sellCount) / float64(totalCount)
+	buyRatio := float64(buyCount) / float64(totalCount)
+
+	// 3. 根据不平衡度计算价格调整系数
+	var adjustment float64
+
+	if sellRatio > 0.7 {
+		// 卖出过多（吃用户买单多）→ 持有USDT多，代币少
+		// 策略：降低价格，吸引用户卖出代币给我们
+		adjustment = -0.03 // 价格下调3%
+		log.Printf("\033[31m⬇️ %s 卖出过多(%.0f%%)，降低价格区间 -3%%\033[0m", symbol, sellRatio*100)
+	} else if sellRatio > 0.6 {
+		adjustment = -0.01 // 价格下调1%
+		log.Printf("\033[33m⬇️ %s 卖出偏多(%.0f%%)，略降价格区间 -1%%\033[0m", symbol, sellRatio*100)
+	} else if buyRatio > 0.7 {
+		// 买入过多（吃用户卖单多）→ 持有代币多，USDT少
+		// 策略：提高价格，吸引用户买入代币
+		adjustment = 0.03 // 价格上调3%
+		log.Printf("\033[31m⬆️ %s 买入过多(%.0f%%)，提高价格区间 +3%%\033[0m", symbol, buyRatio*100)
+	} else if buyRatio > 0.6 {
+		adjustment = 0.01 // 价格上调1%
+		log.Printf("\033[33m⬆️ %s 买入偏多(%.0f%%)，略提价格区间 +1%%\033[0m", symbol, buyRatio*100)
+	} else {
+		// 平衡状态
+		adjustment = 0
+		if totalCount > 5 {
+			log.Printf("\033[32m⚖️ %s 交易平衡(买%.0f%%/卖%.0f%%)，价格区间不变\033[0m", symbol, buyRatio*100, sellRatio*100)
+		}
+	}
+
+	// 4. 更新价格调整系数
+	s.adjustmentMutex.Lock()
+	s.priceAdjustment[symbol] = adjustment
+	s.adjustmentMutex.Unlock()
+
+	// 5. 如果调整幅度较大，立即刷新订单簿
+	if adjustment != 0 && (adjustment >= 0.02 || adjustment <= -0.02) {
+		var pair models.TradingPair
+		if err := database.DB.Where("symbol = ?", symbol).First(&pair).Error; err == nil {
+			// 清理旧虚拟订单
+			database.DB.Where("user_id = ? AND symbol = ? AND status IN (?, ?)",
+				s.virtualUserID, symbol, "pending", "partial").
+				Delete(&models.Order{})
+
+			// 重新创建虚拟订单（带新的价格调整）
+			lastPrice, _ := s.getCurrentPrice(symbol)
+			s.createBuyOrdersWithConfig(symbol, lastPrice, &pair)
+			s.createSellOrdersWithConfig(symbol, lastPrice, &pair)
+
+			log.Printf("\033[35m🔄 %s 价格区间已调整并刷新订单簿（调整系数: %.2f%%）\033[0m", symbol, adjustment*100)
+		}
+	}
+}
+
+// getCurrentPrice 获取当前市场价格
+func (s *DynamicOrderBookSimulator) getCurrentPrice(symbol string) (float64, error) {
+	var lastTrade models.Trade
+	err := database.DB.Where("symbol = ?", symbol).
+		Order("created_at DESC").
+		First(&lastTrade).Error
+
+	if err != nil {
+		return 0, err
+	}
+
+	price, _ := lastTrade.Price.Float64()
+	return price, nil
 }

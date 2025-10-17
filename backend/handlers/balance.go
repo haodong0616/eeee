@@ -59,6 +59,14 @@ type DepositRequest struct {
 func (h *BalanceHandler) Deposit(c *gin.Context) {
 	userID := c.GetString("user_id")
 
+	// 验证用户是否存在（防止外键约束错误）
+	var user models.User
+	if err := database.DB.Where("id = ?", userID).First(&user).Error; err != nil {
+		log.Printf("❌ 充值失败: 用户不存在 (UserID: %s)", userID)
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not found, please login again"})
+		return
+	}
+
 	var req DepositRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -145,6 +153,14 @@ type WithdrawRequest struct {
 // Withdraw 创建提现申请并冻结资金
 func (h *BalanceHandler) Withdraw(c *gin.Context) {
 	userID := c.GetString("user_id")
+
+	// 验证用户是否存在（防止外键约束错误）
+	var user models.User
+	if err := database.DB.Where("id = ?", userID).First(&user).Error; err != nil {
+		log.Printf("❌ 提现失败: 用户不存在 (UserID: %s)", userID)
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not found, please login again"})
+		return
+	}
 
 	var req WithdrawRequest
 	if err := c.ShouldBindJSON(&req); err != nil {

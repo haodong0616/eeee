@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
-import { useAppSelector } from '@/lib/store/hooks';
+import { useAppSelector, useAppDispatch } from '@/lib/store/hooks';
 import {
   useGetTickerQuery,
   useGetOrderBookQuery,
@@ -13,6 +13,7 @@ import {
 } from '@/lib/services/api';
 import { wsClient } from '@/lib/websocket';
 import { formatPrice, formatPercent, formatQuantity, formatVolume } from '@/lib/utils/format';
+import { setLastTradingPair } from '@/lib/store/slices/tradeSlice';
 
 // 禁用静态生成，因为此页面有动态路由参数
 export const dynamic = 'force-dynamic';
@@ -26,6 +27,12 @@ import { useToast } from '@/hooks/useToast';
 export default function TradePage() {
   const params = useParams();
   const symbol = (params.symbol as string).replace('-', '/');
+  const dispatch = useAppDispatch();
+  
+  // 保存最后访问的交易对到 Redux
+  useEffect(() => {
+    dispatch(setLastTradingPair(symbol));
+  }, [symbol, dispatch]);
   
   const { isAuthenticated } = useAppSelector((state) => state.auth);
   const [selectedTab, setSelectedTab] = useState<'open' | 'history'>('open');

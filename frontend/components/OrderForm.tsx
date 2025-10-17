@@ -89,8 +89,11 @@ export default function OrderForm({ symbol, currentPrice, onSubmit, isAuthentica
       const currentPriceValue = parseFloat(price || currentPrice || '0');
       if (currentPriceValue > 0) {
         const maxQty = available / currentPriceValue;
-        // 使用与step匹配的小数位格式化，并去除尾部0
-        setQuantity(parseFloat(maxQty.toFixed(decimals)).toString());
+        // ⚠️ 向下取整，确保不超出可用余额
+        const multiplier = Math.pow(10, decimals);
+        const flooredQty = Math.floor(maxQty * multiplier) / multiplier;
+        // 去除尾部0
+        setQuantity(parseFloat(flooredQty.toFixed(decimals)).toString());
       }
     } else {
       // 卖出：直接使用可用数量，使用与step匹配的小数位，并去除尾部0

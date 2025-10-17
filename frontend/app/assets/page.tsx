@@ -124,8 +124,8 @@ export default function AssetsPage() {
           return txHash;
         })(),
         {
-          loading: `正在 ${chainConfig.chain_name} 上处理充值交易...`,
-          success: (txHash) => `充值交易已提交！\n链: ${chainConfig.chain_name}\n交易hash: ${txHash.slice(0, 10)}...\n后端正在验证，预计1-3分钟到账`,
+          loading: `正在 ${chainConfig.chain_name} 上发送充值交易...`,
+          success: (txHash) => `充值交易已发送！\n链: ${chainConfig.chain_name}\n交易hash: ${txHash.slice(0, 10)}...\n后端正在验证，等待区块链确认后到账`,
           error: (err) => err?.message || err?.data?.error || '充值失败',
         }
       );

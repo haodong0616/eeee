@@ -6,6 +6,7 @@ import (
 	"expchange-backend/services"
 	"fmt"
 	"log"
+	"strings"
 	"sync"
 	"time"
 
@@ -445,8 +446,24 @@ func (q *TaskQueue) executeVerifyDeposit(task *Task) error {
 
 	q.logTask(task.ID, "info", "chain_verification_started", "开始链上验证", "")
 
-	// 调用充值验证服务（会更新充值记录状态）
-	q.depositVerifier.VerifyDeposit(&deposit)
+	// 调用充值验证服务（返回error表示需要重试）
+	verifyErr := q.depositVerifier.VerifyDeposit(&deposit)
+
+	// 检查是否需要重试
+	if verifyErr != nil && strings.Contains(verifyErr.Error(), "RETRY_LATER") {
+		q.logTask(task.ID, "info", "retry_scheduled",
+			"交易未确认，10秒后重试",
+			fmt.Sprintf("原因: %s", verifyErr.Error()))
+
+		// 10秒后重新加入队列
+		go func() {
+			time.Sleep(10 * time.Second)
+			q.queue <- task
+			log.Printf("🔄 充值验证任务已重新加入队列: TaskID=%s, RecordID=%s", task.ID, task.RecordID)
+		}()
+
+		return fmt.Errorf("RETRY_SCHEDULED: %w", verifyErr)
+	}
 
 	// 重新加载充值记录，检查验证结果
 	if err := database.DB.Where("id = ?", task.RecordID).First(&deposit).Error; err != nil {

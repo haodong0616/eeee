@@ -153,8 +153,50 @@ func (h *MarketHandler) GetOrderBook(c *gin.Context) {
 	symbol := normalizeSymbol(c.Param("symbol"))
 	depth := 20 // 默认深度
 
-	orderBook := h.matchingManager.GetOrderBook(symbol, depth)
+	// ⚠️ 从数据库查询虚拟订单展示盘口（虚拟订单不在匹配引擎中）
+	orderBook := h.getOrderBookFromDB(symbol, depth)
 	c.JSON(http.StatusOK, orderBook)
+}
+
+// getOrderBookFromDB 从数据库查询虚拟订单展示盘口
+func (h *MarketHandler) getOrderBookFromDB(symbol string, depth int) *models.OrderBook {
+	var buyOrders []models.Order
+	var sellOrders []models.Order
+
+	// 查询虚拟用户的pending订单
+	database.DB.Where("symbol = ? AND user_id = ? AND status = ? AND side = 'buy'",
+		symbol, "virtual-simulator", "pending").
+		Order("price DESC").
+		Limit(depth).
+		Find(&buyOrders)
+
+	database.DB.Where("symbol = ? AND user_id = ? AND status = ? AND side = 'sell'",
+		symbol, "virtual-simulator", "pending").
+		Order("price ASC").
+		Limit(depth).
+		Find(&sellOrders)
+
+	orderBook := &models.OrderBook{
+		Symbol: symbol,
+		Bids:   []models.OrderBookItem{},
+		Asks:   []models.OrderBookItem{},
+	}
+
+	for _, order := range buyOrders {
+		orderBook.Bids = append(orderBook.Bids, models.OrderBookItem{
+			Price:    order.Price,
+			Quantity: order.Quantity,
+		})
+	}
+
+	for _, order := range sellOrders {
+		orderBook.Asks = append(orderBook.Asks, models.OrderBookItem{
+			Price:    order.Price,
+			Quantity: order.Quantity,
+		})
+	}
+
+	return orderBook
 }
 
 func (h *MarketHandler) GetRecentTrades(c *gin.Context) {

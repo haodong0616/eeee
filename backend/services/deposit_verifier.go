@@ -33,7 +33,8 @@ func NewDepositVerifier() (*DepositVerifier, error) {
 }
 
 // VerifyDeposit 验证单个充值记录（支持多链）
-func (v *DepositVerifier) VerifyDeposit(deposit *models.DepositRecord) {
+// 返回 error 表示需要重试，nil 表示验证完成（成功或失败）
+func (v *DepositVerifier) VerifyDeposit(deposit *models.DepositRecord) error {
 	log.Printf("🔍 验证充值: ID=%s, Chain=%s(%d), Hash=%s, Amount=%s",
 		deposit.ID, deposit.Chain, deposit.ChainID, deposit.TxHash, deposit.Amount.String())
 
@@ -42,14 +43,14 @@ func (v *DepositVerifier) VerifyDeposit(deposit *models.DepositRecord) {
 	if err := database.DB.Where("chain_id = ? AND enabled = ?", deposit.ChainID, true).First(&chainConfig).Error; err != nil {
 		log.Printf("❌ 获取链配置失败 (ChainID=%d): %v", deposit.ChainID, err)
 		v.MarkDepositFailed(deposit, fmt.Sprintf("Chain %d not found or disabled", deposit.ChainID))
-		return
+		return nil // 不重试
 	}
 
 	// 2. 连接到对应的链
 	client, err := ethclient.Dial(chainConfig.RpcURL)
 	if err != nil {
 		log.Printf("❌ 连接RPC失败 (%s): %v", chainConfig.ChainName, err)
-		return
+		return fmt.Errorf("RETRY_LATER: RPC connection failed") // 重试
 	}
 	defer client.Close()
 
@@ -57,32 +58,34 @@ func (v *DepositVerifier) VerifyDeposit(deposit *models.DepositRecord) {
 	txHash := common.HexToHash(deposit.TxHash)
 	receipt, err := client.TransactionReceipt(v.ctx, txHash)
 	if err != nil {
-		// 如果是交易未找到，继续等待
+		// 如果是交易未找到，返回特殊错误让任务队列重试
 		if strings.Contains(err.Error(), "not found") {
-			log.Printf("⏳ 交易还未上链，继续等待: %s", deposit.TxHash)
-			return
+			log.Printf("⏳ 交易还未上链，稍后重试: %s", deposit.TxHash)
+			// 返回特殊错误，任务队列会识别并重试
+			return fmt.Errorf("RETRY_LATER: transaction not found yet")
 		}
 		log.Printf("❌ 获取交易收据失败: %v", err)
-		return
+		v.MarkDepositFailed(deposit, fmt.Sprintf("Failed to get receipt: %v", err))
+		return fmt.Errorf("failed to get receipt: %w", err)
 	}
 
 	// 4. 检查交易是否成功
 	if receipt.Status != 1 {
 		log.Printf("❌ 交易失败: %s", deposit.TxHash)
 		v.MarkDepositFailed(deposit, "Transaction failed")
-		return
+		return nil // 不重试
 	}
 
 	// 5. 获取交易详情
 	tx, isPending, err := client.TransactionByHash(v.ctx, txHash)
 	if err != nil {
 		log.Printf("❌ 获取交易详情失败: %v", err)
-		return
+		return fmt.Errorf("RETRY_LATER: failed to get transaction") // 重试
 	}
 
 	if isPending {
-		log.Printf("⏳ 交易还在pending: %s", deposit.TxHash)
-		return
+		log.Printf("⏳ 交易还在pending，稍后重试: %s", deposit.TxHash)
+		return fmt.Errorf("RETRY_LATER: transaction pending") // 重试
 	}
 
 	// 6. 验证接收合约地址（必须是USDT合约）
@@ -92,7 +95,7 @@ func (v *DepositVerifier) VerifyDeposit(deposit *models.DepositRecord) {
 	if toAddress != expectedContract {
 		log.Printf("❌ 合约地址不匹配: got %s, want %s", toAddress, expectedContract)
 		v.MarkDepositFailed(deposit, "Invalid contract address")
-		return
+		return nil // 不重试
 	}
 
 	// 7. 解析 Transfer 事件验证金额和目标地址
@@ -130,7 +133,7 @@ func (v *DepositVerifier) VerifyDeposit(deposit *models.DepositRecord) {
 		if !actualAmount.Round(6).Equal(expectedAmount.Round(6)) {
 			log.Printf("❌ 金额不匹配: got %s, want %s", actualAmount.String(), expectedAmount.String())
 			v.MarkDepositFailed(deposit, fmt.Sprintf("Amount mismatch: got %s, want %s", actualAmount.String(), expectedAmount.String()))
-			return
+			return nil // 不重试
 		}
 
 		transferFound = true
@@ -140,26 +143,27 @@ func (v *DepositVerifier) VerifyDeposit(deposit *models.DepositRecord) {
 	if !transferFound {
 		log.Printf("❌ 未找到有效的Transfer事件到平台地址")
 		v.MarkDepositFailed(deposit, "No valid transfer event found")
-		return
+		return nil // 不重试
 	}
 
 	// 8. 确认区块数（至少1个确认）
 	currentBlock, err := client.BlockNumber(v.ctx)
 	if err != nil {
 		log.Printf("❌ 获取当前区块失败: %v", err)
-		return
+		return fmt.Errorf("RETRY_LATER: failed to get block number") // 重试
 	}
 
 	confirmations := currentBlock - receipt.BlockNumber.Uint64()
 	if confirmations < 1 {
-		log.Printf("⏳ 等待确认: %d/1", confirmations)
-		return
+		log.Printf("⏳ 等待确认: %d/1，稍后重试", confirmations)
+		return fmt.Errorf("RETRY_LATER: waiting for confirmations") // 重试
 	}
 
 	// 9. 充值成功，增加用户余额
 	log.Printf("✅ 充值验证成功: Chain=%s, TxHash=%s, Confirmations=%d",
 		chainConfig.ChainName, deposit.TxHash, confirmations)
 	v.ConfirmDeposit(deposit)
+	return nil // 验证完成
 }
 
 // ConfirmDeposit 确认充值并增加余额

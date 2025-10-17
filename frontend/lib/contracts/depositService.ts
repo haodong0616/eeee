@@ -75,12 +75,10 @@ export class DepositService {
       );
 
       console.log('✅ 交易已发送，hash:', tx.hash);
-      console.log('⏳ 等待交易确认...');
+      console.log('ℹ️ 不等待确认，立即提交到后端验证');
 
-      // 等待交易确认
-      const receipt = await tx.wait();
-      console.log('✅ 交易已确认！区块号:', receipt.blockNumber);
-
+      // ⚠️ 不等待交易确认，立即返回 hash 给后端验证
+      // 后端会通过验证队列异步确认交易
       return tx.hash;
     } catch (error: any) {
       console.error('❌ 充值失败:', error);

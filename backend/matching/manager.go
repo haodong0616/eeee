@@ -97,16 +97,56 @@ func (m *Manager) processBatch(trades []*models.Trade) {
 		return
 	}
 
+	// ⚠️ 过滤掉做市商手动创建的Trade（已经手动更新过余额了）
+	// 做市商Trade的特征：BuyOrderID 或 SellOrderID 属于虚拟用户（通过wallet_address识别）
+	realTrades := make([]*models.Trade, 0, len(trades))
+	for _, trade := range trades {
+		// 查询订单所属用户
+		var buyOrder, sellOrder models.Order
+		buyExists := database.DB.Where("id = ?", trade.BuyOrderID).First(&buyOrder).Error == nil
+		sellExists := database.DB.Where("id = ?", trade.SellOrderID).First(&sellOrder).Error == nil
+
+		// 查询用户的wallet_address来判断是否是虚拟用户
+		isVirtualTrade := false
+		if buyExists {
+			var buyUser models.User
+			if database.DB.Where("id = ?", buyOrder.UserID).First(&buyUser).Error == nil {
+				if buyUser.WalletAddress == "0x0000000000000000000000000000000000000000" {
+					isVirtualTrade = true
+				}
+			}
+		}
+		if sellExists && !isVirtualTrade {
+			var sellUser models.User
+			if database.DB.Where("id = ?", sellOrder.UserID).First(&sellUser).Error == nil {
+				if sellUser.WalletAddress == "0x0000000000000000000000000000000000000000" {
+					isVirtualTrade = true
+				}
+			}
+		}
+
+		if isVirtualTrade {
+			log.Printf("⏭️ 跳过做市商Trade（已手动处理余额）: TradeID=%s", trade.ID)
+			continue
+		}
+
+		realTrades = append(realTrades, trade)
+	}
+
+	if len(realTrades) == 0 {
+		return // 没有需要处理的真实Trade
+	}
+
 	// 使用事务批量处理
 	err := database.DB.Transaction(func(tx *gorm.DB) error {
 		// 1. 批量保存成交记录
-		if err := tx.CreateInBatches(trades, 100).Error; err != nil {
+		if err := tx.CreateInBatches(realTrades, 100).Error; err != nil {
 			return err
 		}
 
 		// 2. 收集所有涉及的订单ID
 		orderIDs := make(map[string]bool)
-		for _, trade := range trades {
+		for _, trade := range realTrades {
 			orderIDs[trade.BuyOrderID] = true
 			orderIDs[trade.SellOrderID] = true
 		}
@@ -129,7 +169,7 @@ func (m *Manager) processBatch(trades []*models.Trade) {
 		}
 
 		// 5. 处理每个成交
-		for _, trade := range trades {
+		for _, trade := range realTrades {
 			buyOrder := orderMap[trade.BuyOrderID]
 			sellOrder := orderMap[trade.SellOrderID]
 
@@ -167,7 +207,9 @@ func (m *Manager) processBatch(trades []*models.Trade) {
 	if err != nil {
 		log.Printf("❌ Failed to process trade batch: %v", err)
 	} else {
-		log.Printf("✅ Processed %d trades in batch", len(trades))
+		if len(realTrades) > 0 {
+			log.Printf("✅ Processed %d trades in batch", len(realTrades))
+		}
 	}
 }
 

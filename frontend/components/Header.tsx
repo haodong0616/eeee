@@ -14,7 +14,11 @@ import { showToast } from '@/hooks/useToast';
 export default function Header() {
   const dispatch = useAppDispatch();
   const { isAuthenticated, user } = useAppSelector((state) => state.auth);
+  const { lastTradingPair } = useAppSelector((state) => state.trade);
   const [loggingIn, setLoggingIn] = useState(false);
+
+  // 根据 Redux 中的最后交易对生成链接
+  const tradeLink = `/trade/${lastTradingPair.replace('/', '-')}`;
 
   // 使用 wagmi 的钱包连接状态
   const { address: wagmiAddress, isConnected: wagmiIsConnected } = useAccount();
@@ -111,7 +115,7 @@ export default function Header() {
               <Link href="/markets" className="hover:text-primary transition">
                 行情
               </Link>
-              <Link href="/trade/LUNAR-USDT" className="hover:text-primary transition">
+              <Link href={tradeLink} className="hover:text-primary transition">
                 交易
               </Link>
               {isAuthenticated && (
