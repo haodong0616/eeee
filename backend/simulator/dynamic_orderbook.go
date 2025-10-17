@@ -14,7 +14,10 @@ import (
 // DynamicOrderBookSimulator 动态订单簿模拟器 - 根据数据库配置决定模拟哪些交易对
 type DynamicOrderBookSimulator struct {
 	matchingManager  *matching.Manager
-	wsHub            interface{ BroadcastOrderBook(data interface{}) } // WebSocket Hub
+	wsHub            interface{ 
+		BroadcastOrderBook(data interface{})
+		BroadcastTrade(data interface{})
+	} // WebSocket Hub
 	running          bool
 	virtualUserID    string
 	activePairs      map[string]bool                // 当前活跃的模拟交易对
@@ -22,7 +25,10 @@ type DynamicOrderBookSimulator struct {
 	configUpdateChan chan string                    // 配置更新通知通道
 }
 
-func NewDynamicOrderBookSimulator(matchingManager *matching.Manager, wsHub interface{ BroadcastOrderBook(data interface{}) }) *DynamicOrderBookSimulator {
+func NewDynamicOrderBookSimulator(matchingManager *matching.Manager, wsHub interface{ 
+	BroadcastOrderBook(data interface{})
+	BroadcastTrade(data interface{})
+}) *DynamicOrderBookSimulator {
 	// 创建或获取虚拟用户用于挂单
 	var virtualUser models.User
 	walletAddr := "0x0000000000000000000000000000000000000000"
@@ -656,6 +662,17 @@ func (s *DynamicOrderBookSimulator) makeMarketForSymbol(symbol string) {
 		trade.SellOrderID = matchingOrder.ID
 	}
 	database.DB.Create(&trade)
+	
+	// 推送成交记录到WebSocket（实时推送）
+	if s.wsHub != nil {
+		s.wsHub.BroadcastTrade(map[string]interface{}{
+			"symbol":     symbol,
+			"price":      matchingPrice.String(),
+			"quantity":   eatQty.String(),
+			"side":       matchingSide,
+			"created_at": trade.CreatedAt,
+		})
+	}
 
 	// 6. 计算盈亏（与当前市价对比）
 	var profitLossUSDT decimal.Decimal

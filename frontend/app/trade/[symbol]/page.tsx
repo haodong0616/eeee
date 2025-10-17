@@ -31,20 +31,15 @@ export default function TradePage() {
   const [selectedTab, setSelectedTab] = useState<'open' | 'history'>('open');
   const [selectedPrice, setSelectedPrice] = useState<string>('');
   
-  // WebSocket实时订单簿数据
+  // WebSocket实时数据
   const [orderBook, setOrderBook] = useState<any>(null);
-  const [recentTradesState, setRecentTradesState] = useState<any[]>([]);
+  const [recentTrades, setRecentTrades] = useState<any[]>([]);
+  const [ticker, setTicker] = useState<any>(null);
 
-  // 使用 RTK Query 获取初始数据（仅首次）
-  const { data: currentTicker } = useGetTickerQuery(symbol, {
-    pollingInterval: 3000, // 3秒轮询ticker
-  });
-  const { data: initialOrderBook } = useGetOrderBookQuery(symbol, {
-    skip: orderBook !== null, // 有WebSocket数据后跳过轮询
-  });
-  const { data: initialTrades = [] } = useGetRecentTradesQuery(symbol, {
-    skip: recentTradesState.length > 0, // 有WebSocket数据后跳过轮询
-  });
+  // 仅在首次加载时获取初始数据（不轮询）
+  const { data: initialOrderBook } = useGetOrderBookQuery(symbol);
+  const { data: initialTrades = [] } = useGetRecentTradesQuery(symbol);
+  const { data: initialTicker } = useGetTickerQuery(symbol);
   
   // 初始化数据
   useEffect(() => {
@@ -54,12 +49,18 @@ export default function TradePage() {
   }, [initialOrderBook, orderBook]);
   
   useEffect(() => {
-    if (initialTrades.length > 0 && recentTradesState.length === 0) {
-      setRecentTradesState(initialTrades);
+    if (initialTrades.length > 0 && recentTrades.length === 0) {
+      setRecentTrades(initialTrades);
     }
-  }, [initialTrades, recentTradesState.length]);
+  }, [initialTrades, recentTrades.length]);
   
-  const recentTrades = recentTradesState.length > 0 ? recentTradesState : initialTrades;
+  useEffect(() => {
+    if (initialTicker && !ticker) {
+      setTicker(initialTicker);
+    }
+  }, [initialTicker, ticker]);
+  
+  const currentTicker = ticker || initialTicker;
 
   // 获取用户订单（仅在登录时）
   const { data: ordersData } = useGetOrdersQuery(
@@ -89,18 +90,28 @@ export default function TradePage() {
     // 监听成交记录更新（实时推送）
     const handleTradeUpdate = (data: any) => {
       if (data.symbol === symbol) {
-        setRecentTradesState(prev => {
-          // 添加新成交到最前面，保留最近20条
-          return [data, ...prev].slice(0, 20);
+        setRecentTrades((prev: any[]) => {
+          // 添加新成交到最前面，保留最近30条
+          return [data, ...prev].slice(0, 30);
         });
+      }
+    };
+    
+    // 监听ticker更新（实时推送）
+    const handleTickerUpdate = (data: any) => {
+      if (data.symbol === symbol) {
+        setTicker(data);
       }
     };
     
     wsClient.on('orderbook', handleOrderBookUpdate);
     wsClient.on('trade', handleTradeUpdate);
+    wsClient.on('ticker', handleTickerUpdate);
+    
+    console.log('📡 WebSocket已监听:', symbol);
 
     return () => {
-      // WebSocket 保持连接，但可以取消订阅
+      // WebSocket 保持连接
     };
   }, [symbol]);
 
