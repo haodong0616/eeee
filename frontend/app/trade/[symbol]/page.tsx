@@ -30,17 +30,36 @@ export default function TradePage() {
   const { isAuthenticated } = useAppSelector((state) => state.auth);
   const [selectedTab, setSelectedTab] = useState<'open' | 'history'>('open');
   const [selectedPrice, setSelectedPrice] = useState<string>('');
+  
+  // WebSocket实时订单簿数据
+  const [orderBook, setOrderBook] = useState<any>(null);
+  const [recentTradesState, setRecentTradesState] = useState<any[]>([]);
 
-  // 使用 RTK Query 自动刷新数据
+  // 使用 RTK Query 获取初始数据（仅首次）
   const { data: currentTicker } = useGetTickerQuery(symbol, {
-    pollingInterval: 3000, // 3秒轮询
+    pollingInterval: 3000, // 3秒轮询ticker
   });
-  const { data: orderBook } = useGetOrderBookQuery(symbol, {
-    pollingInterval: 2000, // 2秒轮询
+  const { data: initialOrderBook } = useGetOrderBookQuery(symbol, {
+    skip: orderBook !== null, // 有WebSocket数据后跳过轮询
   });
-  const { data: recentTrades = [] } = useGetRecentTradesQuery(symbol, {
-    pollingInterval: 3000,
+  const { data: initialTrades = [] } = useGetRecentTradesQuery(symbol, {
+    skip: recentTradesState.length > 0, // 有WebSocket数据后跳过轮询
   });
+  
+  // 初始化数据
+  useEffect(() => {
+    if (initialOrderBook && !orderBook) {
+      setOrderBook(initialOrderBook);
+    }
+  }, [initialOrderBook, orderBook]);
+  
+  useEffect(() => {
+    if (initialTrades.length > 0 && recentTradesState.length === 0) {
+      setRecentTradesState(initialTrades);
+    }
+  }, [initialTrades, recentTradesState.length]);
+  
+  const recentTrades = recentTradesState.length > 0 ? recentTradesState : initialTrades;
 
   // 获取用户订单（仅在登录时）
   const { data: ordersData } = useGetOrdersQuery(
@@ -55,9 +74,33 @@ export default function TradePage() {
   useEffect(() => {
     // 连接WebSocket
     wsClient.connect();
+    
+    // 监听订单簿更新（实时推送）
+    const handleOrderBookUpdate = (data: any) => {
+      if (data.symbol === symbol) {
+        setOrderBook({
+          symbol: data.symbol,
+          bids: data.bids || [],
+          asks: data.asks || [],
+        });
+      }
+    };
+    
+    // 监听成交记录更新（实时推送）
+    const handleTradeUpdate = (data: any) => {
+      if (data.symbol === symbol) {
+        setRecentTradesState(prev => {
+          // 添加新成交到最前面，保留最近20条
+          return [data, ...prev].slice(0, 20);
+        });
+      }
+    };
+    
+    wsClient.on('orderbook', handleOrderBookUpdate);
+    wsClient.on('trade', handleTradeUpdate);
 
     return () => {
-      // WebSocket 保持连接
+      // WebSocket 保持连接，但可以取消订阅
     };
   }, [symbol]);
 

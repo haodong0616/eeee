@@ -14,6 +14,7 @@ import (
 // DynamicOrderBookSimulator 动态订单簿模拟器 - 根据数据库配置决定模拟哪些交易对
 type DynamicOrderBookSimulator struct {
 	matchingManager  *matching.Manager
+	wsHub            interface{ BroadcastOrderBook(data interface{}) } // WebSocket Hub
 	running          bool
 	virtualUserID    string
 	activePairs      map[string]bool                // 当前活跃的模拟交易对
@@ -21,7 +22,7 @@ type DynamicOrderBookSimulator struct {
 	configUpdateChan chan string                    // 配置更新通知通道
 }
 
-func NewDynamicOrderBookSimulator(matchingManager *matching.Manager) *DynamicOrderBookSimulator {
+func NewDynamicOrderBookSimulator(matchingManager *matching.Manager, wsHub interface{ BroadcastOrderBook(data interface{}) }) *DynamicOrderBookSimulator {
 	// 创建或获取虚拟用户用于挂单
 	var virtualUser models.User
 	walletAddr := "0x0000000000000000000000000000000000000000"
@@ -59,6 +60,7 @@ func NewDynamicOrderBookSimulator(matchingManager *matching.Manager) *DynamicOrd
 
 	return &DynamicOrderBookSimulator{
 		matchingManager:  matchingManager,
+		wsHub:            wsHub,
 		running:          false,
 		virtualUserID:    virtualUser.ID,
 		activePairs:      make(map[string]bool),
@@ -268,6 +270,16 @@ func (s *DynamicOrderBookSimulator) createOrdersWithConfig(symbol string, pair *
 	// 使用配置的档位数和波动率创建买卖单
 	s.createBuyOrdersWithConfig(symbol, currentPrice, pair)
 	s.createSellOrdersWithConfig(symbol, currentPrice, pair)
+
+	// 推送订单簿更新到WebSocket（实时推送）
+	if s.wsHub != nil {
+		orderbook := s.matchingManager.GetOrderBook(symbol, 50) // 获取50档深度
+		s.wsHub.BroadcastOrderBook(map[string]interface{}{
+			"symbol": symbol,
+			"bids":   orderbook.Bids,
+			"asks":   orderbook.Asks,
+		})
+	}
 }
 
 // createBuyOrders 创建买单（兼容旧调用）
@@ -524,12 +536,54 @@ func (s *DynamicOrderBookSimulator) makeMarketForSymbol(symbol string) {
 		return // 没有真实用户订单，跳过
 	}
 
-	// 2. 随机选择一个订单吃掉（40%概率 - 更活跃）
-	if rand.Float64() > 0.4 {
-		return // 60%概率不操作，避免太快吃完
+	// 2. 优先吃买一/卖一，制造价格上下波动效果 🎯
+	// 80%概率操作（高频率）
+	if rand.Float64() > 0.8 {
+		return
 	}
 
-	targetOrder := realOrders[rand.Intn(len(realOrders))]
+	// 按价格排序：优先吃最优价格（买一/卖一）
+	var buyOrders, sellOrders []models.Order
+	for _, order := range realOrders {
+		if order.Side == "buy" {
+			buyOrders = append(buyOrders, order)
+		} else {
+			sellOrders = append(sellOrders, order)
+		}
+	}
+
+	// 交替吃买单和卖单，产生上下波动
+	var targetOrder models.Order
+	shouldEatBuy := rand.Float64() < 0.5
+
+	if shouldEatBuy && len(buyOrders) > 0 {
+		// 吃买单 → 价格可能下跌
+		// 找最高买价
+		maxBuyPrice := buyOrders[0].Price
+		targetOrder = buyOrders[0]
+		for _, order := range buyOrders {
+			if order.Price.GreaterThan(maxBuyPrice) {
+				maxBuyPrice = order.Price
+				targetOrder = order
+			}
+		}
+	} else if len(sellOrders) > 0 {
+		// 吃卖单 → 价格可能上涨
+		// 找最低卖价
+		minSellPrice := sellOrders[0].Price
+		targetOrder = sellOrders[0]
+		for _, order := range sellOrders {
+			if order.Price.LessThan(minSellPrice) {
+				minSellPrice = order.Price
+				targetOrder = order
+			}
+		}
+	} else if len(buyOrders) > 0 {
+		// 回退：吃买单
+		targetOrder = buyOrders[0]
+	} else {
+		return
+	}
 
 	// 3. 获取当前市场价格
 	var lastTrade models.Trade
@@ -566,16 +620,16 @@ func (s *DynamicOrderBookSimulator) makeMarketForSymbol(symbol string) {
 		matchingPrice = targetOrder.Price // 以卖单价格成交（对真实用户有利）
 	}
 
-	// 吃掉部分或全部（随机50%-100%）
+	// 吃掉较大数量（70%-100%），制造明显的价格波动
 	remainingQty := targetOrder.Quantity.Sub(targetOrder.FilledQty)
-	eatRatio := 0.5 + rand.Float64()*0.5 // 50%-100%
+	eatRatio := 0.7 + rand.Float64()*0.3 // 70%-100%，更激进
 	eatQty := remainingQty.Mul(decimal.NewFromFloat(eatRatio))
 
-	// 创建匹配订单
+	// 创建匹配订单（市价单，立即成交）
 	matchingOrder := models.Order{
 		UserID:    s.virtualUserID,
 		Symbol:    symbol,
-		OrderType: "limit",
+		OrderType: "market", // 改为市价单，确保立即成交
 		Side:      matchingSide,
 		Price:     matchingPrice,
 		Quantity:  eatQty,
@@ -586,25 +640,40 @@ func (s *DynamicOrderBookSimulator) makeMarketForSymbol(symbol string) {
 	database.DB.Create(&matchingOrder)
 	s.matchingManager.AddOrder(&matchingOrder)
 
+	// 立即生成一笔模拟成交，更新最新价（让价格真正波动）
+	trade := models.Trade{
+		Symbol:      symbol,
+		BuyOrderID:  matchingOrder.ID,
+		SellOrderID: targetOrder.ID,
+		Price:       matchingPrice,
+		Quantity:    eatQty,
+	}
+	if matchingSide == "buy" {
+		trade.BuyOrderID = matchingOrder.ID
+		trade.SellOrderID = targetOrder.ID
+	} else {
+		trade.BuyOrderID = targetOrder.ID
+		trade.SellOrderID = matchingOrder.ID
+	}
+	database.DB.Create(&trade)
+
 	// 6. 计算盈亏（与当前市价对比）
-	profitLoss := decimal.Zero
-	profitPercent := decimal.Zero
+	var profitLossUSDT decimal.Decimal
+	var profitPercent decimal.Decimal
 
 	if matchingSide == "buy" {
 		// 虚拟用户买入，如果买价低于市价就是赚的
-		profitLoss = currentPrice.Sub(matchingPrice).Mul(eatQty)
+		profitLossUSDT = currentPrice.Sub(matchingPrice).Mul(eatQty).Mul(currentPrice)
 		if !matchingPrice.IsZero() {
 			profitPercent = currentPrice.Sub(matchingPrice).Div(matchingPrice).Mul(decimal.NewFromInt(100))
 		}
 	} else {
 		// 虚拟用户卖出，如果卖价高于市价就是赚的
-		profitLoss = matchingPrice.Sub(currentPrice).Mul(eatQty)
+		profitLossUSDT = matchingPrice.Sub(currentPrice).Mul(eatQty).Mul(currentPrice)
 		if !currentPrice.IsZero() {
 			profitPercent = matchingPrice.Sub(currentPrice).Div(currentPrice).Mul(decimal.NewFromInt(100))
 		}
 	}
-
-	profitLossUSDT := profitLoss.Mul(currentPrice) // 转换为USDT价值
 
 	// 7. 保存盈亏记录
 	pnlRecord := models.MarketMakerPnL{
@@ -628,7 +697,7 @@ func (s *DynamicOrderBookSimulator) makeMarketForSymbol(symbol string) {
 		profitSign = "➖ 持平"
 	}
 
-	log.Printf("🤖 做市商吃单: %s %s %.4f @ %.8f (市价: %.8f, %s: %s USDT, %.2f%%)",
-		symbol, matchingSide, eatQty, matchingPrice, currentPrice,
-		profitSign, profitLossUSDT.StringFixed(2), profitPercent)
+	log.Printf("🤖 做市商吃单: %s %s %s @ %s (市价: %s, %s: %s USDT, %.2f%%)",
+		symbol, matchingSide, eatQty.StringFixed(4), matchingPrice.StringFixed(8), currentPrice.StringFixed(8),
+		profitSign, profitLossUSDT.StringFixed(2), profitPercent.InexactFloat64())
 }

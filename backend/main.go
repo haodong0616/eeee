@@ -57,9 +57,9 @@ func main() {
 	log.Printf("   - 提现处理: 1个独立worker（线程安全）")
 
 	// 启动动态订单簿模拟器（根据数据库配置自动为启用的交易对生成订单）
-	dynamicSim := simulator.NewDynamicOrderBookSimulator(matchingManager)
+	dynamicSim := simulator.NewDynamicOrderBookSimulator(matchingManager, wsHub)
 	dynamicSim.Start()
-	log.Println("✅ 动态订单簿模拟器已启动")
+	log.Println("✅ 动态订单簿模拟器已启动（支持WebSocket实时推送）")
 
 	// 初始化Gin (设置为Release模式降低日志输出)
 	gin.SetMode(gin.ReleaseMode)
