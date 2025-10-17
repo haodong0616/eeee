@@ -1,4 +1,4 @@
-// WebSocket 配置 - 自动检测环境（WebSocket无法代理，需直连）
+// WebSocket 配置 - 自动检测环境
 const getWsUrl = () => {
   // 服务器端直接返回默认值
   if (typeof window === 'undefined') {
@@ -11,9 +11,15 @@ const getWsUrl = () => {
   
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
   const hostname = window.location.hostname;
-  const port = window.location.port || (window.location.protocol === 'https:' ? '443' : '80');
-  // WebSocket 通过 Next.js 服务器代理
-  return `${protocol}//${hostname}:${window.location.port || '3000'}`;
+  const port = window.location.port;
+  
+  // ⚠️ 生产环境（通过Nginx，标准端口）：wss://velocity.0v1.xyz
+  // ⚠️ 开发环境（Next.js服务器，非标准端口）：ws://localhost:3000
+  if (port) {
+    return `${protocol}//${hostname}:${port}`;
+  } else {
+    return `${protocol}//${hostname}`;
+  }
 };
 
 export class WebSocketClient {
