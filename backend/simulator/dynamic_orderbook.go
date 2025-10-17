@@ -158,11 +158,13 @@ func (s *DynamicOrderBookSimulator) maintainOrderBook(symbol string) {
 	// 首次启动时立即创建订单
 	s.createOrdersWithConfig(symbol, &pair)
 
-	// 根据配置动态调整更新频率
-	// ActivityLevel: 1-10 → 订单簿更新间隔: 20秒-4秒
-	orderbookInterval := 24 - (pair.ActivityLevel * 2) // 1→22s, 5→14s, 10→4s
-	if orderbookInterval < 4 {
-		orderbookInterval = 4
+	// 根据配置动态调整更新频率（支持极速模式）
+	// ActivityLevel: 1-10 → 订单簿更新间隔: 20秒-1秒
+	orderbookInterval := 22 - (pair.ActivityLevel * 2) // 1→20s, 5→12s, 8→6s, 10→2s
+	if pair.ActivityLevel >= 9 {
+		orderbookInterval = 1 // 活跃度9-10: 1秒极速更新 🚀
+	} else if orderbookInterval < 2 {
+		orderbookInterval = 2
 	}
 	orderbookTicker := time.NewTicker(time.Duration(orderbookInterval) * time.Second)
 	defer orderbookTicker.Stop()
@@ -215,10 +217,10 @@ func (s *DynamicOrderBookSimulator) maintainOrderBook(symbol string) {
 			if err := database.DB.Where("symbol = ?", symbol).First(&pair).Error; err == nil {
 				s.pairConfigs[symbol] = &pair
 
-				// 重新计算并重置订单簿更新间隔
-				newOrderbookInterval := 24 - (pair.ActivityLevel * 2)
-				if newOrderbookInterval < 4 {
-					newOrderbookInterval = 4
+				// 重新计算并重置订单簿更新间隔（支持极速模式）
+				newOrderbookInterval := 22 - (pair.ActivityLevel * 2)
+				if newOrderbookInterval < 1 {
+					newOrderbookInterval = 1 // 极速：1秒更新
 				}
 				orderbookTicker.Reset(time.Duration(newOrderbookInterval) * time.Second)
 
@@ -488,10 +490,13 @@ func (s *DynamicOrderBookSimulator) simulateMarketTradeWithConfig(symbol string,
 	log.Printf("💹 %s 模拟市价成交: %s %.8f @ %.8f", symbol, side, quantity, price)
 }
 
-// marketMakerLoop 做市商循环 - 慢慢吃掉真实用户的订单
+// marketMakerLoop 做市商循环 - 极速吃单模式 🚀
 func (s *DynamicOrderBookSimulator) marketMakerLoop() {
-	ticker := time.NewTicker(12 * time.Second) // 每12秒检查一次（更频繁）
+	// 极速模式：每200毫秒检查一次（每秒5次）
+	ticker := time.NewTicker(200 * time.Millisecond)
 	defer ticker.Stop()
+
+	log.Println("🤖 做市商极速模式已启动，嘎嘎快速吃单中...")
 
 	for range ticker.C {
 		if !s.running {

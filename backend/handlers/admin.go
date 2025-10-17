@@ -357,13 +357,17 @@ func (h *AdminHandler) GetAllTrades(c *gin.Context) {
 }
 
 type CreateTradingPairRequest struct {
-	Symbol     string `json:"symbol" binding:"required"`
-	BaseAsset  string `json:"base_asset" binding:"required"`
-	QuoteAsset string `json:"quote_asset" binding:"required"`
-	MinPrice   string `json:"min_price"`
-	MaxPrice   string `json:"max_price"`
-	MinQty     string `json:"min_qty"`
-	MaxQty     string `json:"max_qty"`
+	Symbol          string  `json:"symbol" binding:"required"`
+	BaseAsset       string  `json:"base_asset" binding:"required"`
+	QuoteAsset      string  `json:"quote_asset" binding:"required"`
+	MinPrice        string  `json:"min_price"`
+	MaxPrice        string  `json:"max_price"`
+	MinQty          string  `json:"min_qty"`
+	MaxQty          string  `json:"max_qty"`
+	ActivityLevel   *int    `json:"activity_level"`   // 活跃度等级
+	OrderbookDepth  *int    `json:"orderbook_depth"`  // 订单簿深度
+	TradeFrequency  *int    `json:"trade_frequency"`  // 成交频率
+	PriceVolatility *string `json:"price_volatility"` // 价格波动率
 }
 
 // 创建交易对
@@ -484,6 +488,21 @@ func (h *AdminHandler) UpdateTradingPair(c *gin.Context) {
 	if req.MaxQty != "" {
 		maxQty, _ := decimal.NewFromString(req.MaxQty)
 		pair.MaxQty = maxQty
+	}
+
+	// 更新活跃度配置
+	if req.ActivityLevel != nil {
+		pair.ActivityLevel = *req.ActivityLevel
+	}
+	if req.OrderbookDepth != nil {
+		pair.OrderbookDepth = *req.OrderbookDepth
+	}
+	if req.TradeFrequency != nil {
+		pair.TradeFrequency = *req.TradeFrequency
+	}
+	if req.PriceVolatility != nil {
+		volatility, _ := decimal.NewFromString(*req.PriceVolatility)
+		pair.PriceVolatility = volatility
 	}
 
 	if err := database.DB.Save(&pair).Error; err != nil {

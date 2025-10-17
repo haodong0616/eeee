@@ -668,14 +668,16 @@ export default function PairsPage() {
                   </div>
                 </div>
 
-                <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-3 mt-4">
-                  <div className="text-xs text-blue-400">
-                    <div className="font-bold mb-1">💡 预计效果：</div>
-                    <div>• 订单簿每 <strong>{Math.max(4, 24 - editFormData.activity_level * 2)}秒</strong> 更新一次</div>
-                    <div>• 价格分布范围: ±<strong>{(parseFloat(editFormData.price_volatility) * editFormData.activity_level * 50).toFixed(1)}%</strong></div>
-                    <div>• 成交量波动: <strong>{editFormData.activity_level <= 3 ? '小' : editFormData.activity_level <= 6 ? '中等' : '大'}</strong></div>
-                  </div>
+              <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-3 mt-4">
+                <div className="text-xs text-blue-400">
+                  <div className="font-bold mb-1">💡 预计效果：</div>
+                  <div>• 订单簿每 <strong>
+                    {editFormData.activity_level >= 9 ? '1秒 🚀' : Math.max(2, 22 - editFormData.activity_level * 2) + '秒'}
+                  </strong> 更新一次</div>
+                  <div>• 价格分布范围: ±<strong>{(parseFloat(editFormData.price_volatility) * editFormData.activity_level * 50).toFixed(1)}%</strong></div>
+                  <div>• 成交量波动: <strong>{editFormData.activity_level <= 3 ? '小' : editFormData.activity_level <= 6 ? '中等' : editFormData.activity_level >= 9 ? '极大 🔥' : '大'}</strong></div>
                 </div>
+              </div>
               </div>
 
               <div className="flex space-x-4">
@@ -821,9 +823,11 @@ export default function PairsPage() {
               <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-4">
                 <div className="text-sm text-blue-400">
                   <div className="font-bold mb-2">💡 预计效果（所有交易对）：</div>
-                  <div>• 订单簿每 <strong>{Math.max(4, 24 - batchActivity.activity_level * 2)}秒</strong> 更新一次</div>
+                  <div>• 订单簿每 <strong>
+                    {batchActivity.activity_level >= 9 ? '1秒 🚀 极速模式' : Math.max(2, 22 - batchActivity.activity_level * 2) + '秒'}
+                  </strong> 更新一次</div>
                   <div>• 价格分布范围: ±<strong>{(parseFloat(batchActivity.price_volatility) * batchActivity.activity_level * 50).toFixed(1)}%</strong></div>
-                  <div>• 成交量波动: <strong>{batchActivity.activity_level <= 3 ? '小' : batchActivity.activity_level <= 6 ? '中等' : '大'}</strong></div>
+                  <div>• 成交量波动: <strong>{batchActivity.activity_level <= 3 ? '小' : batchActivity.activity_level <= 6 ? '中等' : batchActivity.activity_level >= 9 ? '极大 🔥' : '大'}</strong></div>
                   <div className="mt-2 text-xs text-gray-400">
                     将更新所有启用模拟器的交易对（共 {pairs.filter((p: TradingPair) => p.simulator_enabled).length} 个）
                   </div>
