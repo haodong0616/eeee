@@ -206,12 +206,9 @@ export default function TradePage() {
 
       {/* 桌面端布局 */}
       <div className="hidden lg:grid grid-cols-12 gap-4 mb-4">
-        {/* 左侧：盘口和最近成交 */}
+        {/* 左侧：盘口 */}
         <div className="col-span-3">
           <OrderBook orderBook={orderBook} onPriceClick={handlePriceClick} symbol={symbol} />
-          <div className="mt-4">
-            <TradeHistory trades={recentTrades} symbol={symbol} />
-          </div>
         </div>
 
         {/* 中间：图表区域 */}
@@ -219,8 +216,9 @@ export default function TradePage() {
           <TradingChart symbol={symbol} />
         </div>
 
-        {/* 右侧：下单区域 */}
-        <div className="col-span-3">
+        {/* 右侧：最近成交 + 下单区域 */}
+        <div className="col-span-3 space-y-4">
+          <TradeHistory trades={recentTrades} symbol={symbol} />
           <OrderForm
             symbol={symbol}
             currentPrice={currentTicker?.last_price}

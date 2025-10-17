@@ -3,11 +3,16 @@ package database
 import (
 	"expchange-backend/models"
 	"log"
+	"sync"
 	"time"
 
 	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
+
+// K线生成互斥锁，防止并发写入导致死锁
+var klineGenerationMutex sync.Mutex
 
 // 自动检测并初始化数据（仅初始化基础配置）
 func AutoSeed() {
@@ -78,6 +83,10 @@ func seedTradingPairs() {
 
 // SeedKlinesForSymbol 为单个交易对生成K线数据（优化版：并发 + 一次查询）
 func SeedKlinesForSymbol(symbol string) {
+	// 使用互斥锁，确保K线生成任务串行执行，避免死锁
+	klineGenerationMutex.Lock()
+	defer klineGenerationMutex.Unlock()
+
 	log.Printf("📈 开始为 %s 生成K线数据...\n", symbol)
 
 	// 获取交易对信息
@@ -147,18 +156,14 @@ func SeedKlinesForSymbol(symbol string) {
 		totalKlines += len(result.klines)
 	}
 
-	// 批量插入K线（使用事务）
+	// 批量插入K线（使用UPSERT，避免重复和死锁）
 	if len(allKlines) > 0 {
-		log.Printf("📝 批量插入 %d 根K线...", len(allKlines))
+		log.Printf("📝 批量插入/更新 %d 根K线...", len(allKlines))
 		insertStart := time.Now()
 
-		// 先清理该交易对的旧K线（避免重复）
-		log.Printf("🧹 清理旧K线数据...")
-		DB.Where("symbol = ?", symbol).Delete(&models.Kline{})
-
-		// 使用事务批量插入
+		// 使用事务批量插入/更新
 		err := DB.Transaction(func(tx *gorm.DB) error {
-			// 批量插入：每批500条（SQLite参数限制，MySQL可以更大但500已经足够）
+			// 批量插入：每批500条
 			batchSize := 500
 
 			for i := 0; i < len(allKlines); i += batchSize {
@@ -167,7 +172,13 @@ func SeedKlinesForSymbol(symbol string) {
 					end = len(allKlines)
 				}
 
-				if err := tx.CreateInBatches(allKlines[i:end], batchSize).Error; err != nil {
+				batch := allKlines[i:end]
+
+				// 使用 Clauses 实现 UPSERT
+				// ON DUPLICATE KEY UPDATE: 如果唯一键冲突，则更新
+				if err := tx.Clauses(clause.OnConflict{
+					UpdateAll: true, // 更新所有字段
+				}).CreateInBatches(batch, batchSize).Error; err != nil {
 					return err
 				}
 
