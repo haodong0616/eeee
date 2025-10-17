@@ -2,6 +2,7 @@ package models
 
 import (
 	"expchange-backend/utils"
+	"strings"
 	"time"
 
 	"github.com/shopspring/decimal"
@@ -21,6 +22,14 @@ func (u *User) BeforeCreate(tx *gorm.DB) error {
 	if u.ID == "" {
 		u.ID = utils.GenerateObjectID()
 	}
+	// 强制转换为小写
+	u.WalletAddress = strings.ToLower(u.WalletAddress)
+	return nil
+}
+
+func (u *User) BeforeSave(tx *gorm.DB) error {
+	// 强制转换为小写
+	u.WalletAddress = strings.ToLower(u.WalletAddress)
 	return nil
 }
 

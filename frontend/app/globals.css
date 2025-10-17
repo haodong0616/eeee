@@ -149,6 +149,30 @@ input:focus {
   box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.5);
 }
 
+/* 防止移动端输入框聚焦时自动放大页面 */
+input[type="text"],
+input[type="number"],
+input[type="email"],
+input[type="tel"],
+input[type="password"],
+textarea,
+select {
+  font-size: 16px !important;  /* iOS Safari 需要至少 16px 才不会自动放大 */
+}
+
+/* 桌面端可以使用更小的字体 */
+@media (min-width: 1024px) {
+  input[type="text"],
+  input[type="number"],
+  input[type="email"],
+  input[type="tel"],
+  input[type="password"],
+  textarea,
+  select {
+    font-size: 0.875rem !important;  /* 桌面端 14px */
+  }
+}
+
 /* 滚动条样式 */
 ::-webkit-scrollbar {
   width: 6px;
