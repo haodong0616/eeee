@@ -2,7 +2,7 @@
 
 import { useMemo } from 'react';
 import useSWR from 'swr';
-import { adminApi } from '@/lib/api/admin';
+import { adminApi, type WithdrawRecord } from '@/lib/api/admin';
 import { getChains } from '@/lib/api/admin';
 
 export default function WithdrawalsPage() {
@@ -18,8 +18,8 @@ export default function WithdrawalsPage() {
 
   // 创建链ID到链配置的映射
   const chainMap = useMemo(() => {
-    const map = new Map();
-    chains.forEach(chain => map.set(chain.chain_id, chain));
+    const map = new Map<number, any>();
+    chains.forEach((chain: any) => map.set(chain.chain_id, chain));
     return map;
   }, [chains]);
 
@@ -93,7 +93,7 @@ export default function WithdrawalsPage() {
                     </td>
                   </tr>
                 ) : (
-                  withdrawals.map((withdrawal: any) => {
+                  withdrawals.map((withdrawal: WithdrawRecord) => {
                     const chain = chainMap.get(withdrawal.chain_id);
                     const explorerUrl = chain?.block_explorer_url || 'https://bscscan.com';
 
@@ -143,16 +143,9 @@ export default function WithdrawalsPage() {
                           )}
                         </td>
                         <td className="p-4">
-                          <div>
-                            <span className={`px-2 py-1 rounded text-xs ${getStatusBadge(withdrawal.status)}`}>
-                              {getStatusText(withdrawal.status)}
-                            </span>
-                            {withdrawal.status === 'failed' && withdrawal.error && (
-                              <div className="text-xs text-red-400 mt-1" title={withdrawal.error}>
-                                {withdrawal.error}
-                              </div>
-                            )}
-                          </div>
+                          <span className={`px-2 py-1 rounded text-xs ${getStatusBadge(withdrawal.status)}`}>
+                            {getStatusText(withdrawal.status)}
+                          </span>
                         </td>
                         <td className="p-4 text-sm text-gray-400">
                           {new Date(withdrawal.created_at).toLocaleString('zh-CN')}

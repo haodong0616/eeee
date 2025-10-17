@@ -30,10 +30,10 @@ export interface Order {
 export interface Trade {
   id: string;
   symbol: string;
+  buy_order_id: string;
+  sell_order_id: string;
   price: string;
   quantity: string;
-  buyer_id: string;
-  seller_id: string;
   created_at: string;
 }
 
@@ -43,13 +43,10 @@ export interface TradingPair {
   symbol: string;
   base_asset: string;
   quote_asset: string;
-  enabled: boolean;
-  price_decimals: number;
-  quantity_decimals: number;
   min_price: string;
   max_price: string;
-  min_quantity: string;
-  max_quantity: string;
+  min_qty: string;
+  max_qty: string;
   status: string;
   simulator_enabled: boolean;
   created_at: string;
@@ -108,6 +105,51 @@ export interface TaskLog {
   created_at: string;
 }
 
+// 充值记录接口
+export interface DepositRecord {
+  id: string;
+  user_id: string;
+  user?: User;
+  asset: string;
+  amount: string;
+  tx_hash: string;
+  chain: string;
+  chain_id: number;
+  status: string; // pending, confirmed, failed
+  task_id?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+// 提现记录接口
+export interface WithdrawRecord {
+  id: string;
+  user_id: string;
+  user?: User;
+  asset: string;
+  amount: string;
+  address: string;
+  tx_hash?: string;
+  chain: string;
+  chain_id: number;
+  status: string; // pending, processing, completed, failed
+  task_id?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+// 系统配置接口
+export interface SystemConfig {
+  id: string;
+  key: string;
+  value: string;
+  description: string;
+  category: string;
+  value_type: string; // string, number, boolean
+  created_at: string;
+  updated_at: string;
+}
+
 // ==================== 用户管理 ====================
 
 export const getUsers = async () => {
@@ -132,12 +174,12 @@ export const getTrades = async () => {
 // ==================== 充值提现管理 ====================
 
 export const getDeposits = async () => {
-  const response = await axios.get('/admin/deposits');
+  const response = await axios.get<DepositRecord[]>('/admin/deposits');
   return response.data;
 };
 
 export const getWithdrawals = async () => {
-  const response = await axios.get('/admin/withdrawals');
+  const response = await axios.get<WithdrawRecord[]>('/admin/withdrawals');
   return response.data;
 };
 
@@ -244,6 +286,28 @@ export const retryTask = async (taskId: string) => {
   return response.data;
 };
 
+// ==================== 系统配置管理 ====================
+
+export const getSystemConfigs = async () => {
+  const response = await axios.get<SystemConfig[]>('/admin/configs');
+  return response.data;
+};
+
+export const getSystemConfig = async (id: string) => {
+  const response = await axios.get<SystemConfig>(`/admin/configs/${id}`);
+  return response.data;
+};
+
+export const updateSystemConfig = async (id: string, value: string) => {
+  const response = await axios.put(`/admin/configs/${id}`, { value });
+  return response.data;
+};
+
+export const reloadSystemConfigs = async () => {
+  const response = await axios.post('/admin/configs/reload');
+  return response.data;
+};
+
 // ==================== 统一导出 adminApi 对象 ====================
 
 export const adminApi = {
@@ -286,4 +350,11 @@ export const adminApi = {
   getRunningTask,
   getTaskLogs,
   retryTask,
+  
+  // 系统配置管理
+  getSystemConfigs,
+  getSystemConfig,
+  updateSystemConfig,
+  reloadSystemConfigs,
 };
+

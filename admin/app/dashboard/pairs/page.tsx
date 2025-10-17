@@ -528,3 +528,4 @@ export default function PairsPage() {
     </div>
   );
 }
+

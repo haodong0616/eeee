@@ -176,7 +176,7 @@ func (h *MarketHandler) GetKlines(c *gin.Context) {
 	limit := 100
 
 	var klines []models.Kline
-	database.DB.Where("symbol = ? AND interval = ?", symbol, interval).
+	database.DB.Where("symbol = ? AND `interval` = ?", symbol, interval).
 		Order("open_time DESC").
 		Limit(limit).
 		Find(&klines)

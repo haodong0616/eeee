@@ -153,16 +153,16 @@ func main() {
 			admin.GET("/withdrawals", adminHandler.GetAllWithdrawals)
 			admin.GET("/stats", adminHandler.GetStats)
 
-		// 交易对管理
-		admin.GET("/pairs", adminHandler.GetTradingPairs)
-		admin.POST("/pairs", adminHandler.CreateTradingPair)
-		admin.PUT("/pairs/:id", adminHandler.UpdateTradingPair)
-		admin.PUT("/pairs/:id/status", adminHandler.UpdateTradingPairStatus)
-		admin.PUT("/pairs/:id/simulator", adminHandler.UpdateTradingPairSimulator)
+			// 交易对管理
+			admin.GET("/pairs", adminHandler.GetTradingPairs)
+			admin.POST("/pairs", adminHandler.CreateTradingPair)
+			admin.PUT("/pairs/:id", adminHandler.UpdateTradingPair)
+			admin.PUT("/pairs/:id/status", adminHandler.UpdateTradingPairStatus)
+			admin.PUT("/pairs/:id/simulator", adminHandler.UpdateTradingPairSimulator)
 
-		// 数据生成任务
-		admin.POST("/pairs/generate-trades", adminHandler.GenerateTradeDataForPair)
-		admin.POST("/pairs/generate-klines", adminHandler.GenerateKlineDataForPair)
+			// 数据生成任务
+			admin.POST("/pairs/generate-trades", adminHandler.GenerateTradeDataForPair)
+			admin.POST("/pairs/generate-klines", adminHandler.GenerateKlineDataForPair)
 
 			// 任务管理
 			admin.GET("/tasks", adminHandler.GetAllTasks)

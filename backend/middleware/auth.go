@@ -93,3 +93,4 @@ func AdminAuthMiddleware(cfg *config.Config) gin.HandlerFunc {
 		c.Next()
 	}
 }
+

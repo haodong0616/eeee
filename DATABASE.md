@@ -284,3 +284,4 @@ A: `ls -lh backend/expchange.db`
 **Q: 并发安全吗？**  
 A: 是的，SQLite支持多读单写，GORM会处理连接池。
 
+

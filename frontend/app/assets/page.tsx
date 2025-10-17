@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useAppSelector } from '@/lib/store/hooks';
-import { useGetBalancesQuery, useDepositMutation, useWithdrawMutation, useGetDepositRecordsQuery, useGetWithdrawRecordsQuery } from '@/lib/services/api';
+import { useGetBalancesQuery, useDepositMutation, useWithdrawMutation, useGetDepositRecordsQuery, useGetWithdrawRecordsQuery, useGetAllTickersQuery } from '@/lib/services/api';
 import { useRouter } from 'next/navigation';
 import { useAccount, useChainId } from 'wagmi';
 import { useWalletClient } from 'wagmi';
@@ -11,6 +11,7 @@ import { ClockIcon } from '@heroicons/react/24/outline';
 import Link from 'next/link';
 import { useToast } from '@/hooks/useToast';
 import { useChains } from '@/hooks/useChains';
+import { formatQuantity } from '@/lib/utils/format';
 
 // 禁用静态生成，因为此页面需要认证
 export const dynamic = 'force-dynamic';
@@ -26,6 +27,12 @@ export default function AssetsPage() {
   
   // 使用 RTK Query 自动刷新余额
   const { data: balances = [], isLoading } = useGetBalancesQuery(undefined, {
+    skip: !isAuthenticated,
+    pollingInterval: 5000,
+  });
+  
+  // 获取所有交易对价格
+  const { data: tickers = [] } = useGetAllTickersQuery(undefined, {
     skip: !isAuthenticated,
     pollingInterval: 5000,
   });
@@ -189,16 +196,40 @@ export default function AssetsPage() {
     }
   };
 
-  const totalValueUSDT = balances.reduce((sum, balance) => {
-    // 简化计算，实际需要根据当前价格计算
-    return sum + parseFloat(balance.available || '0') + parseFloat(balance.frozen || '0');
-  }, 0);
+  // 获取代币价格
+  const getAssetPrice = (asset: string): number => {
+    if (asset === 'USDT') return 1;
+    
+    const ticker = tickers.find(t => t.symbol === `${asset}/USDT`);
+    return ticker ? parseFloat(ticker.last_price || '0') : 0;
+  };
 
-  // 格式化数字显示，USDT显示2位小数，其他显示8位
+  // 计算代币价值（USDT）
+  const calculateValue = (amount: string | number, asset: string): number => {
+    const num = parseFloat(amount.toString());
+    const price = getAssetPrice(asset);
+    return num * price;
+  };
+
+  // 格式化数字显示，根据币种类型使用不同精度
   const formatAmount = (amount: string | number, asset: string) => {
     const num = parseFloat(amount.toString());
-    return asset === 'USDT' ? num.toFixed(2) : num.toFixed(8);
+    
+    // USDT 显示2位小数
+    if (asset === 'USDT') {
+      return num.toFixed(2);
+    }
+    
+    // 其他币种使用 formatQuantity，传入虚拟交易对格式
+    return formatQuantity(num, `${asset}/USDT`);
   };
+
+  // 计算总资产估值（基于实际价格）
+  const totalValueUSDT = balances.reduce((sum, balance) => {
+    const total = parseFloat(balance.available || '0') + parseFloat(balance.frozen || '0');
+    const value = calculateValue(total, balance.asset);
+    return sum + value;
+  }, 0);
 
   return (
     <div className="container mx-auto px-3 lg:px-4 py-4 lg:py-8">
@@ -216,15 +247,10 @@ export default function AssetsPage() {
           {/* 记录图标按钮 */}
           <Link
             href="/assets/records"
-            className="p-2 lg:p-3 bg-[#151a35] hover:bg-[#1a1f3a] border border-gray-700 rounded-lg transition relative"
+            className="p-2 lg:p-3 bg-[#151a35] hover:bg-[#1a1f3a] border border-gray-700 rounded-lg transition hover:border-primary"
             title="充值/提现记录"
           >
-            <ClockIcon className="w-5 h-5 lg:w-6 lg:h-6 text-gray-400" />
-            {(depositRecords.length + withdrawRecords.length) > 0 && (
-              <span className="absolute -top-1 -right-1 bg-primary text-white text-xs w-5 h-5 rounded-full flex items-center justify-center">
-                {depositRecords.length + withdrawRecords.length}
-              </span>
-            )}
+            <ClockIcon className="w-5 h-5 lg:w-6 lg:h-6 text-gray-400 hover:text-primary transition" />
           </Link>
         </div>
 
@@ -266,14 +292,18 @@ export default function AssetsPage() {
         ) : (
           balances.map((balance) => {
             const total = parseFloat(balance.available) + parseFloat(balance.frozen);
+            const totalValue = calculateValue(total, balance.asset);
             return (
               <div
                 key={balance.id}
                 className="grid grid-cols-4 gap-4 p-4 border-t border-gray-800 hover:bg-[#151a35] transition"
               >
                 <div className="font-semibold">{balance.asset}</div>
-                <div className="text-right font-semibold">
-                  {formatAmount(total, balance.asset)}
+                <div className="text-right">
+                  <div className="font-semibold">{formatAmount(total, balance.asset)}</div>
+                  {balance.asset !== 'USDT' && totalValue > 0 && (
+                    <div className="text-xs text-gray-500">≈ ${totalValue.toFixed(2)}</div>
+                  )}
                 </div>
                 <div className="text-right text-gray-400">{formatAmount(balance.available, balance.asset)}</div>
                 <div className="text-right text-gray-400">{formatAmount(balance.frozen, balance.asset)}</div>
@@ -283,45 +313,44 @@ export default function AssetsPage() {
         )}
       </div>
 
-      {/* 余额列表 - 移动端卡片 */}
-      <div className="lg:hidden space-y-3">
+      {/* 余额列表 - 移动端紧凑列表 */}
+      <div className="lg:hidden bg-[#0f1429] rounded-lg border border-gray-800 overflow-hidden">
+        {/* 表头 */}
+        <div className="grid grid-cols-4 gap-2 p-3 bg-[#151a35] text-gray-400 text-xs font-semibold">
+          <div>币种</div>
+          <div className="text-right">总计</div>
+          <div className="text-right">可用</div>
+          <div className="text-right">冻结</div>
+        </div>
+        
+        {/* 数据行 */}
         {isLoading ? (
-          <div className="bg-[#0f1429] rounded-lg border border-gray-800 p-8 text-center text-gray-400">
-            加载中...
-          </div>
+          <div className="p-8 text-center text-gray-400 text-sm">加载中...</div>
         ) : balances.length === 0 ? (
-          <div className="bg-[#0f1429] rounded-lg border border-gray-800 p-8 text-center text-gray-400">
-            暂无资产
-          </div>
+          <div className="p-8 text-center text-gray-400 text-sm">暂无资产</div>
         ) : (
-          balances.map((balance) => {
+          balances.map((balance, index) => {
             const total = parseFloat(balance.available) + parseFloat(balance.frozen);
+            const totalValue = calculateValue(total, balance.asset);
             return (
               <div
                 key={balance.id}
-                className="bg-[#0f1429] rounded-lg border border-gray-800 p-4"
+                className={`grid grid-cols-4 gap-2 p-3 text-sm ${
+                  index % 2 === 0 ? 'bg-[#0f1429]' : 'bg-[#151a35]/30'
+                }`}
               >
-                {/* 币种和总计 */}
-                <div className="flex items-center justify-between mb-3">
-                  <div className="text-lg font-bold">{balance.asset}</div>
-                  <div className="text-right">
-                    <div className="text-xs text-gray-400 mb-1">总计</div>
-                    <div className="text-lg font-semibold">
-                      {formatAmount(total, balance.asset)}
-                    </div>
-                  </div>
+                <div className="font-bold">{balance.asset}</div>
+                <div className="text-right">
+                  <div className="font-mono font-semibold">{formatAmount(total, balance.asset)}</div>
+                  {balance.asset !== 'USDT' && totalValue > 0 && (
+                    <div className="text-[10px] text-gray-500 font-mono">≈${totalValue.toFixed(2)}</div>
+                  )}
                 </div>
-
-                {/* 可用和冻结 */}
-                <div className="grid grid-cols-2 gap-3 text-sm">
-                  <div className="bg-[#151a35] rounded-lg p-3">
-                    <div className="text-gray-400 mb-1">可用</div>
-                    <div className="font-mono">{formatAmount(balance.available, balance.asset)}</div>
-                  </div>
-                  <div className="bg-[#151a35] rounded-lg p-3">
-                    <div className="text-gray-400 mb-1">冻结</div>
-                    <div className="font-mono">{formatAmount(balance.frozen, balance.asset)}</div>
-                  </div>
+                <div className="text-right font-mono text-gray-400">
+                  {formatAmount(balance.available, balance.asset)}
+                </div>
+                <div className="text-right font-mono text-gray-400">
+                  {formatAmount(balance.frozen, balance.asset)}
                 </div>
               </div>
             );

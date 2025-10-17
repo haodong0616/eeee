@@ -2,7 +2,7 @@
 
 import { useMemo } from 'react';
 import useSWR from 'swr';
-import { adminApi } from '@/lib/api/admin';
+import { adminApi, type DepositRecord } from '@/lib/api/admin';
 import { getChains } from '@/lib/api/admin';
 
 export default function DepositsPage() {
@@ -18,8 +18,8 @@ export default function DepositsPage() {
 
   // 创建链ID到链配置的映射
   const chainMap = useMemo(() => {
-    const map = new Map();
-    chains.forEach(chain => map.set(chain.chain_id, chain));
+    const map = new Map<number, any>();
+    chains.forEach((chain: any) => map.set(chain.chain_id, chain));
     return map;
   }, [chains]);
 
@@ -80,7 +80,7 @@ export default function DepositsPage() {
                     </td>
                   </tr>
                 ) : (
-                  deposits.map((deposit) => {
+                  deposits.map((deposit: DepositRecord) => {
                     const chain = chainMap.get(deposit.chain_id);
                     const explorerUrl = chain?.block_explorer_url || 'https://bscscan.com';
 

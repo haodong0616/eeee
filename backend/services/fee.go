@@ -140,3 +140,4 @@ func (s *FeeService) GetUserFeeStats(userID string) (map[string]decimal.Decimal,
 
 	return stats, nil
 }
+

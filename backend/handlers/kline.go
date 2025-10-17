@@ -33,7 +33,7 @@ func (h *KlineHandler) GetKlines(c *gin.Context) {
 	}
 
 	var klines []models.Kline
-	database.DB.Where("symbol = ? AND interval = ?", symbol, interval).
+	database.DB.Where("symbol = ? AND `interval` = ?", symbol, interval).
 		Order("open_time DESC").
 		Limit(limit).
 		Find(&klines)
@@ -62,7 +62,7 @@ func (h *KlineHandler) GetKlinesForTradingView(c *gin.Context) {
 	toTimestamp, _ := strconv.ParseInt(toStr, 10, 64)
 
 	var klines []models.Kline
-	database.DB.Where("symbol = ? AND interval = ? AND open_time >= ? AND open_time <= ?",
+	database.DB.Where("symbol = ? AND `interval` = ? AND open_time >= ? AND open_time <= ?",
 		symbol, interval, fromTimestamp, toTimestamp).
 		Order("open_time ASC").
 		Find(&klines)
@@ -118,4 +118,3 @@ func (h *KlineHandler) GenerateHistoricalKlines(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{"message": "Historical klines generation started"})
 }
-

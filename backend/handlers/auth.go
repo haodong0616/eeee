@@ -13,6 +13,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
+	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
 )
 
 type AuthHandler struct {
@@ -43,7 +45,9 @@ func (h *AuthHandler) GetNonce(c *gin.Context) {
 	walletAddress := strings.ToLower(req.WalletAddress)
 
 	var user models.User
-	result := database.DB.Where("wallet_address = ?", walletAddress).First(&user)
+	// 使用静默模式查询，避免打印 "record not found" 日志
+	result := database.DB.Session(&gorm.Session{Logger: database.DB.Logger.LogMode(logger.Silent)}).
+		Where("wallet_address = ?", walletAddress).First(&user)
 
 	if result.Error != nil {
 		// 创建新用户
@@ -132,3 +136,4 @@ func generateNonce() string {
 	rand.Read(b)
 	return hex.EncodeToString(b)
 }
+

@@ -37,3 +37,4 @@ func CORSMiddleware(cfg *config.Config) gin.HandlerFunc {
 		c.Next()
 	}
 }
+

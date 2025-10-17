@@ -8,6 +8,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/shopspring/decimal"
+	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
 )
 
 type OrderHandler struct {
@@ -85,7 +87,10 @@ func (h *OrderHandler) CreateOrder(c *gin.Context) {
 		baseAsset := getBaseAsset(req.Symbol)
 
 		var balance models.Balance
-		if err := database.DB.Where("user_id = ? AND asset = ?", userID, baseAsset).First(&balance).Error; err != nil {
+		// 静默查询，避免打印 "record not found" 日志
+		err := database.DB.Session(&gorm.Session{Logger: database.DB.Logger.LogMode(logger.Silent)}).
+			Where("user_id = ? AND asset = ?", userID, baseAsset).First(&balance).Error
+		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Insufficient balance"})
 			return
 		}

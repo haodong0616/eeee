@@ -6,7 +6,7 @@
 export DB_TYPE=mysql
 export DB_HOST=localhost
 export DB_PORT=3308
-export DB_USER=referral_user
+export DB_USER=expchange
 export DB_PASSWORD=referral123456
 export DB_NAME=referral_system
 

@@ -22,7 +22,7 @@ func Load() (*Config, error) {
 	godotenv.Load()
 
 	return &Config{
-		ServerPort: getEnv("SERVER_PORT", "8383"),
+		ServerPort: "8383",
 		// MySQL 配置（使用共享 Docker MySQL）
 		DBType:     "mysql",
 		DBHost:     "localhost",

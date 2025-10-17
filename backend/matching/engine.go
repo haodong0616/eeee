@@ -244,3 +244,4 @@ func (q *SellOrderQueue) Pop() interface{} {
 	*q = old[0 : n-1]
 	return item
 }
+

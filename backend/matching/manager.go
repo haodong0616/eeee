@@ -179,8 +179,8 @@ func (m *Manager) updateBalancesInTx(tx *gorm.DB, buyOrder, sellOrder *models.Or
 
 	// 获取用户等级
 	var buyer, seller models.User
-	tx.First(&buyer, buyOrder.UserID)
-	tx.First(&seller, sellOrder.UserID)
+	tx.Where("id = ?", buyOrder.UserID).First(&buyer)
+	tx.Where("id = ?", sellOrder.UserID).First(&seller)
 
 	// 判断谁是Maker，谁是Taker
 	buyerIsMaker := buyOrder.CreatedAt.Before(sellOrder.CreatedAt)

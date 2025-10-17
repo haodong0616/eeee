@@ -10,6 +10,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/shopspring/decimal"
+	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
 )
 
 type BalanceHandler struct{}
@@ -76,9 +78,11 @@ func (h *BalanceHandler) Deposit(c *gin.Context) {
 		return
 	}
 
-	// 检查交易hash是否已存在
+	// 检查交易hash是否已存在（静默模式，找不到是预期的）
 	var existing models.DepositRecord
-	if err := database.DB.Where("tx_hash = ?", strings.ToLower(req.TxHash)).First(&existing).Error; err == nil {
+	err = database.DB.Session(&gorm.Session{Logger: database.DB.Logger.LogMode(logger.Silent)}).
+		Where("tx_hash = ?", strings.ToLower(req.TxHash)).First(&existing).Error
+	if err == nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Transaction hash already exists"})
 		return
 	}

@@ -76,7 +76,7 @@ func (g *Generator) generateKlineForPair(symbol string, interval string, openTim
 		var lastKline models.Kline
 		// 静默查询，不记录"record not found"错误
 		result := database.DB.Session(&gorm.Session{Logger: database.DB.Logger.LogMode(logger.Silent)}).
-			Where("symbol = ? AND interval = ?", symbol, interval).
+			Where("symbol = ? AND `interval` = ?", symbol, interval).
 			Order("open_time DESC").
 			First(&lastKline)
 
@@ -116,7 +116,9 @@ func (g *Generator) generateKlineForPair(symbol string, interval string, openTim
 
 	// 检查是否已存在该K线
 	var existingKline models.Kline
-	result := database.DB.Where("symbol = ? AND interval = ? AND open_time = ?",
+	// 使用静默模式查询，避免打印 "record not found" 日志
+	result := database.DB.Session(&gorm.Session{Logger: database.DB.Logger.LogMode(logger.Silent)}).
+		Where("symbol = ? AND `interval` = ? AND open_time = ?",
 		symbol, interval, openTime).First(&existingKline)
 
 	if result.Error != nil {

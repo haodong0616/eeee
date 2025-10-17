@@ -78,3 +78,4 @@ func (h *FeeHandler) UpdateUserLevel(c *gin.Context) {
 
 	c.JSON(http.StatusOK, user)
 }
+

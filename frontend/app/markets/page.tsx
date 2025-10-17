@@ -142,7 +142,7 @@ export default function MarketsPage() {
         ) : (
           <div className="bg-gradient-to-br from-gray-800/40 to-gray-900/40 backdrop-blur-sm rounded-lg md:rounded-2xl border border-gray-700/50 overflow-hidden shadow-xl md:shadow-2xl">
             {/* Table Header - Desktop */}
-            <div className="hidden md:grid grid-cols-6 gap-4 p-4 bg-gradient-to-r from-primary/10 to-purple-500/10 border-b border-gray-700/50 font-semibold text-sm">
+            <div className="hidden md:grid grid-cols-6 gap-4 p-3 bg-gradient-to-r from-primary/10 to-purple-500/10 border-b border-gray-700/50 font-semibold text-sm">
               <div>交易对</div>
               <button
                 onClick={() => handleSort('price')}
@@ -176,7 +176,7 @@ export default function MarketsPage() {
             </div>
 
             {/* Table Header - Mobile (Hidden, using top sort buttons instead) */}
-            <div className="md:hidden bg-gradient-to-r from-primary/10 to-purple-500/10 border-b border-gray-700/50 px-3 py-2">
+            <div className="md:hidden bg-gradient-to-r from-primary/10 to-purple-500/10 border-b border-gray-700/50 px-3 py-1.5">
               <div className="grid grid-cols-3 gap-2 text-[10px] font-semibold text-gray-400">
                 <div>交易对</div>
                 <div className="text-right">最新价</div>
@@ -205,7 +205,7 @@ export default function MarketsPage() {
                     style={{ animationDelay: `${index * 30}ms` }}
                   >
                     {/* Desktop Layout */}
-                    <div className="hidden md:grid grid-cols-6 gap-4 p-4">
+                    <div className="hidden md:grid grid-cols-6 gap-4 p-3">
                       {/* Token Name */}
                       <div className="font-semibold">
                         <div className="group-hover:text-primary transition-colors text-base">
@@ -226,7 +226,7 @@ export default function MarketsPage() {
 
                       {/* 24h Change */}
                       <div className="text-right flex flex-col items-end justify-center">
-                        <span className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-lg font-bold text-sm ${
+                        <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg font-bold text-sm ${
                           isPositive 
                             ? 'bg-gradient-to-r from-green-500/20 to-green-600/20 text-green-400 border border-green-500/30' 
                             : 'bg-gradient-to-r from-red-500/20 to-red-600/20 text-red-400 border border-red-500/30'
@@ -262,7 +262,7 @@ export default function MarketsPage() {
                     </div>
 
                     {/* Mobile Layout */}
-                    <div className="md:hidden px-3 py-2.5 space-y-1">
+                    <div className="md:hidden px-3 py-1.5 space-y-1">
                       {/* Row 1: Token Name | Price | Change */}
                       <div className="grid grid-cols-3 gap-2 items-center">
                         <div className="font-semibold text-sm group-hover:text-primary transition-colors">
