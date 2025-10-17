@@ -63,15 +63,17 @@ const connectors = connectorsForWallets(
 );
 
 // 创建 Wagmi 配置
+// 🔧 配置优化的 RPC 节点（与后端配置保持一致）
 export const wagmiConfig = createConfig({
   chains,
   connectors,
   transports: {
-    [mainnet.id]: http(),
-    [bsc.id]: http(),
-    [polygon.id]: http(),
-    [arbitrum.id]: http(),
-    [sepolia.id]: http(),
+    // 使用优化的 RPC（可在后端数据库中配置相同的 URL）
+    [mainnet.id]: http('https://eth.llamarpc.com'),           // Ethereum Mainnet
+    [bsc.id]: http('https://bsc-dataseed1.binance.org'),      // BSC Mainnet
+    [polygon.id]: http('https://polygon-rpc.com'),            // Polygon
+    [arbitrum.id]: http('https://arb1.arbitrum.io/rpc'),      // Arbitrum
+    [sepolia.id]: http('https://ethereum-sepolia.publicnode.com'),            // Sepolia Testnet
   },
   ssr: true,
 });
