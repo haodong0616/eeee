@@ -717,7 +717,7 @@ func (h *AdminHandler) GetAllWithdrawals(c *gin.Context) {
 func (h *AdminHandler) GetSystemConfigs(c *gin.Context) {
 	category := c.Query("category")
 
-	query := database.DB.Order("category, key")
+	query := database.DB.Order("category, `key`")
 	if category != "" {
 		query = query.Where("category = ?", category)
 	}
