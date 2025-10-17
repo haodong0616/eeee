@@ -30,6 +30,7 @@ export default function DashboardLayout({
     { href: '/dashboard/pairs', label: '交易对管理', icon: '💱' },
     { href: '/dashboard/orders', label: '订单管理', icon: '📋' },
     { href: '/dashboard/trades', label: '成交记录', icon: '📈' },
+    { href: '/dashboard/market-maker', label: '做市商盈亏', icon: '🤖' },
     { href: '/dashboard/deposits', label: '充值记录', icon: '💰' },
     { href: '/dashboard/withdrawals', label: '提现记录', icon: '💸' },
     { href: '/dashboard/tasks', label: '队列任务', icon: '📝' },

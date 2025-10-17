@@ -44,8 +44,13 @@ type TradingPair struct {
 	MaxQty           decimal.Decimal `gorm:"type:decimal(20,8)" json:"max_qty"`
 	Status           string          `gorm:"size:20;default:'active'" json:"status"` // active, inactive
 	SimulatorEnabled bool            `gorm:"default:false" json:"simulator_enabled"` // 是否启用市场模拟器
-	CreatedAt        time.Time       `json:"created_at"`
-	UpdatedAt        time.Time       `json:"updated_at"`
+	// 活跃度配置（1-10，默认5）
+	ActivityLevel   int             `gorm:"default:5" json:"activity_level"`                         // 1=低活跃度, 5=中等, 10=高活跃度
+	OrderbookDepth  int             `gorm:"default:15" json:"orderbook_depth"`                       // 订单簿档位数（5-30）
+	TradeFrequency  int             `gorm:"default:20" json:"trade_frequency"`                       // 成交间隔秒数（5-60）
+	PriceVolatility decimal.Decimal `gorm:"type:decimal(10,4);default:0.01" json:"price_volatility"` // 价格波动率（0.001-0.05）
+	CreatedAt       time.Time       `json:"created_at"`
+	UpdatedAt       time.Time       `json:"updated_at"`
 }
 
 func (t *TradingPair) BeforeCreate(tx *gorm.DB) error {
@@ -196,6 +201,27 @@ type WithdrawRecord struct {
 func (w *WithdrawRecord) BeforeCreate(tx *gorm.DB) error {
 	if w.ID == "" {
 		w.ID = utils.GenerateObjectID()
+	}
+	return nil
+}
+
+// 做市商盈亏记录
+type MarketMakerPnL struct {
+	ID            string          `gorm:"primaryKey;size:24" json:"id"`
+	Symbol        string          `gorm:"size:20;not null;index" json:"symbol"`
+	TradeID       string          `gorm:"size:24;index" json:"trade_id"`                    // 关联的交易ID
+	Side          string          `gorm:"size:10;not null" json:"side"`                     // buy, sell
+	ExecutePrice  decimal.Decimal `gorm:"type:decimal(20,8);not null" json:"execute_price"` // 执行价格
+	MarketPrice   decimal.Decimal `gorm:"type:decimal(20,8);not null" json:"market_price"`  // 当时市价
+	Quantity      decimal.Decimal `gorm:"type:decimal(20,8);not null" json:"quantity"`
+	ProfitLoss    decimal.Decimal `gorm:"type:decimal(20,8)" json:"profit_loss"`    // 盈亏（USDT）
+	ProfitPercent decimal.Decimal `gorm:"type:decimal(10,4)" json:"profit_percent"` // 盈亏百分比
+	CreatedAt     time.Time       `json:"created_at"`
+}
+
+func (m *MarketMakerPnL) BeforeCreate(tx *gorm.DB) error {
+	if m.ID == "" {
+		m.ID = utils.GenerateObjectID()
 	}
 	return nil
 }

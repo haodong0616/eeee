@@ -159,6 +159,9 @@ func main() {
 			admin.PUT("/pairs/:id", adminHandler.UpdateTradingPair)
 			admin.PUT("/pairs/:id/status", adminHandler.UpdateTradingPairStatus)
 			admin.PUT("/pairs/:id/simulator", adminHandler.UpdateTradingPairSimulator)
+			admin.POST("/pairs/batch-activity", adminHandler.BatchUpdatePairsActivity)
+			admin.POST("/pairs/batch-init", adminHandler.BatchGenerateInitData)
+			admin.POST("/pairs/batch-klines", adminHandler.BatchGenerateKlines)
 
 			// 数据生成任务
 			admin.POST("/pairs/generate-trades", adminHandler.GenerateTradeDataForPair)
@@ -192,6 +195,10 @@ func main() {
 			admin.PUT("/chains/:id", chainHandler.UpdateChain)
 			admin.PUT("/chains/:id/status", chainHandler.UpdateChainStatus)
 			admin.DELETE("/chains/:id", chainHandler.DeleteChain)
+
+			// 做市商盈亏管理
+			admin.GET("/market-maker/pnl", adminHandler.GetMarketMakerPnL)
+			admin.GET("/market-maker/stats", adminHandler.GetMarketMakerStats)
 		}
 	}
 

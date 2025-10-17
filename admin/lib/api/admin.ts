@@ -49,6 +49,11 @@ export interface TradingPair {
   max_qty: string;
   status: string;
   simulator_enabled: boolean;
+  // 活跃度配置
+  activity_level?: number;      // 1-10，默认5
+  orderbook_depth?: number;     // 5-30，默认15
+  trade_frequency?: number;     // 5-60秒，默认20
+  price_volatility?: string;    // 0.001-0.05，默认0.01
   created_at: string;
   updated_at: string;
 }
@@ -217,6 +222,35 @@ export const updateTradingPairSimulator = async (id: string, enabled: boolean) =
   return response.data;
 };
 
+export const batchUpdatePairsActivity = async (data: {
+  symbols?: string[];
+  activity_level?: number;
+  orderbook_depth?: number;
+  trade_frequency?: number;
+  price_volatility?: string;
+}) => {
+  const response = await axios.post('/admin/pairs/batch-activity', data);
+  return response.data;
+};
+
+export const batchGenerateInitData = async (data: {
+  symbols?: string[];
+  start_time?: string;
+  end_time?: string;
+  trade_count?: number;
+  generate_klines?: boolean;
+}) => {
+  const response = await axios.post('/admin/pairs/batch-init', data);
+  return response.data;
+};
+
+export const batchGenerateKlines = async (data: {
+  symbols?: string[];
+}) => {
+  const response = await axios.post('/admin/pairs/batch-klines', data);
+  return response.data;
+};
+
 export const generateTradeDataForPair = async (symbol: string, startTime: string, endTime: string) => {
   const response = await axios.post('/admin/pairs/generate-trades', { symbol, start_time: startTime, end_time: endTime });
   return response.data;
@@ -333,6 +367,9 @@ export const adminApi = {
   updateTradingPair,
   updateTradingPairStatus,
   updateTradingPairSimulator,
+  batchUpdatePairsActivity,
+  batchGenerateInitData,
+  batchGenerateKlines,
   generateTradeDataForPair,
   generateKlineDataForPair,
   
