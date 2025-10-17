@@ -31,7 +31,7 @@ app.prepare().then(() => {
   server.on('upgrade', (request, socket, head) => {
     const { pathname } = parse(request.url);
 
-    if (pathname === '/ws') {
+    if (pathname === '/api/ws') {
       wss.handleUpgrade(request, socket, head, (ws) => {
         // 连接到后端 WebSocket
         const backendWs = new WebSocket(`ws://${BACKEND_URL}/ws`);

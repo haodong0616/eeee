@@ -1,8 +1,8 @@
 // WebSocket 配置 - 自动检测环境
 const getWsUrl = () => {
-  // 服务器端直接返回默认值
+  // 服务器端直接返回默认值（实际不会使用）
   if (typeof window === 'undefined') {
-    return 'ws://localhost:8383';
+    return 'ws://localhost:3000';
   }
   
   if (process.env.NEXT_PUBLIC_WS_URL) {
@@ -34,7 +34,7 @@ export class WebSocketClient {
     }
 
     const WS_URL = getWsUrl();
-    this.ws = new WebSocket(`${WS_URL}/ws`);
+    this.ws = new WebSocket(`${WS_URL}/api/ws`);
 
     this.ws.onopen = () => {
       console.log('WebSocket connected');
